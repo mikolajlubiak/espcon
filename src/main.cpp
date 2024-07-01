@@ -1,8 +1,19 @@
+#ifndef BUILD_ENV
+    #error "Add -D BUILD_ENV_NAME=$PIOENV to platformio.ini build_flags"
+#else
+    #define esp32_s3_devkitc_1_n16r8v 1
+    #define esp32_s3_devkitc_1 2
+    #define uno 3
+#endif
+
+#if BUILD_ENV==uno
+#include <StandardCplusplus.h>
+#endif
+
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
 
-#include <iostream>
 #include <vector>
 #include <cmath>
 

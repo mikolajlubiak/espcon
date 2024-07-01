@@ -89,7 +89,7 @@ mesh *initMeshCube()
 
 struct mat4
 {
-  float m[4][4] = {0};
+  float m[4][4]{};
 };
 
 mesh *meshCube = initMeshCube();
@@ -100,7 +100,7 @@ uint32_t deltaTime;
 uint32_t elapsedTime;
 
 uint16_t color;
-uint8_t r;
+uint8_t r, g, b;
 
 void MultiplyMatrixVector(vec3d &i, vec3d &o, mat4 &m)
 {
@@ -150,14 +150,15 @@ void loop()
 
   deltaTime = millis() - elapsedTime;
   elapsedTime = millis();
+  float theta = (float)elapsedTime / 1000;
   // Serial.println(1000.0f/deltaTime, DEC); // FPS
 
-  r = (r + 1) % 32;
-  color = ((r << 11) | (0 << 5) | (31 - r));
+  r = sin(theta * 2.0f) * 31;
+  g = sin(theta * 0.7f) * 63;
+  b = sin(theta * 1.3f) * 31;
+  color = ((r << 11) | (g << 5) | b);
 
   mat4 matRotZ, matRotX;
-
-  float theta = (float)elapsedTime / 1000;
 
   // Rotation Z
   matRotZ.m[0][0] = cosf(theta);

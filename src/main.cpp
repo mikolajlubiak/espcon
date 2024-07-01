@@ -8,7 +8,7 @@ void setup()
 
   if (err != 0)
   {
-    Serial.printf("ERROR %uhh\n", err);
+    Serial.print("ERROR\n");
     exit(err);
   }
 }

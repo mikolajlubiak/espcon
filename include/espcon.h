@@ -7,6 +7,8 @@
 #define TFT_DC 8
 #define HEIGHT 128
 #define WIDTH 128
+#define FPS 30
+#define FRAME_DELAY 1000 / FPS
 
 struct vec3d
 {
@@ -15,12 +17,13 @@ struct vec3d
 
 struct mat4
 {
-    float m[4][4]{};
+    float m[4][4] = {0.0f};
 };
 
 struct triangle
 {
     vec3d p[3];
+    uint16_t col;
 };
 
 struct mesh
@@ -31,53 +34,68 @@ struct mesh
 
 mesh *allocMesh(uint32_t numTris)
 {
-    mesh *mMesh = reinterpret_cast<mesh *>(malloc(sizeof(mesh)));
-    mMesh->tris = reinterpret_cast<triangle *>(malloc(sizeof(triangle) * numTris));
+    mesh *mMesh = reinterpret_cast<mesh *>(calloc(1, sizeof(mesh)));
+    mMesh->tris = reinterpret_cast<triangle *>(calloc(numTris, sizeof(triangle)));
     mMesh->numTris = numTris;
     return mMesh;
 }
 
 void freeMesh(mesh *mMesh)
 {
-    free(mMesh->tris);
-    free(mMesh);
+    // Check if the triangle array pointer is not NULL before freeing it
+    if (mMesh && mMesh->tris)
+    {
+        free(mMesh->tris);
+        mMesh->tris = nullptr;
+    }
+
+    // Check if the mesh pointer itself is not NULL before freeing it
+    if (mMesh)
+    {
+        free(mMesh);
+        mMesh = nullptr;
+    }
 }
 
 mesh *initMeshCube()
 {
-    uint32_t numTris = 12;
+    constexpr uint32_t numTris = 12;
 
-    mesh *mMesh = reinterpret_cast<mesh *>(malloc(sizeof(mesh)));
-    mMesh->tris = reinterpret_cast<triangle *>(malloc(sizeof(triangle) * numTris));
+    mesh *mMesh = reinterpret_cast<mesh *>(calloc(1, sizeof(mesh)));
+    mMesh->tris = reinterpret_cast<triangle *>(calloc(numTris, sizeof(triangle)));
     mMesh->numTris = numTris;
 
     // Cube vertices
     const vec3d vertices[8] = {
-        {0.0f, 0.0f, 0.0f}, // 0 - bottom-left-back
-        {1.0f, 0.0f, 0.0f}, // 1 - bottom-right-front
-        {1.0f, 0.0f, 1.0f}, // 2 - top-right-front
-        {0.0f, 0.0f, 1.0f}, // 3 - top-left-back
-        {0.0f, 1.0f, 0.0f}, // 4 - bottom-left-front
-        {1.0f, 1.0f, 0.0f}, // 5 - bottom-right-back
-        {1.0f, 1.0f, 1.0f}, // 6 - top-right-back
-        {0.0f, 1.0f, 1.0f}  // 7 - top-left-front
-    };
+        {0.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f},
+        {0.0f, 1.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f},
+        {1.0f, 1.0f, 0.0f},
+        {1.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f},
+        {1.0f, 0.0f, 1.0f}};
 
     // Triangle indices
     int triIndices[numTris][3] = {
-        {0, 1, 2},
-        {0, 2, 3}, // Front face
-        {4, 5, 6},
-        {4, 6, 7}, // Back face
-        {1, 5, 6},
-        {1, 6, 2}, // Right face
-        {0, 4, 7},
-        {0, 7, 3}, // Left face
-        {3, 7, 6},
-        {3, 6, 2}, // Top face
-        {1, 0, 3},
-        {1, 3, 5} // Bottom face
-    };
+        // SOUTH
+        {0, 6, 4},
+        {0, 4, 5},
+        // EAST
+        {5, 4, 3},
+        {5, 3, 7},
+        // NORTH
+        {7, 3, 2},
+        {7, 2, 1},
+        // WEST
+        {1, 2, 6},
+        {1, 6, 0},
+        // TOP
+        {6, 2, 3},
+        {6, 3, 4},
+        // BOTTOM
+        {7, 1, 0},
+        {7, 0, 5}};
 
     // Assign vertices to triangles
     for (uint32_t i = 0; i < numTris; ++i)
@@ -105,24 +123,48 @@ void multiplyMatrixVector(const vec3d &i, vec3d &o, const mat4 &m)
     }
 }
 
+int compareTris(const void *t1Ptr, const void *t2Ptr)
+{
+    const triangle *t1 = reinterpret_cast<const triangle *>(t1Ptr);
+    const triangle *t2 = reinterpret_cast<const triangle *>(t2Ptr);
+    float z1 = (t1->p[0].z + t1->p[1].z + t1->p[2].z) / 3;
+    float z2 = (t2->p[0].z + t2->p[1].z + t2->p[2].z) / 3;
+    return z1 > z2;
+}
+
+uint16_t getColor(float lum)
+{
+    int rb = max(lum, 0.20f) * 31;
+    int g = max(lum, 0.20f) * 63;
+    return ((rb << 11) | (g << 5) | rb);
+}
+
 class ESPCon
 {
     Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
-    mesh *meshCube;
+    mesh *mMesh = initMeshCube();
+
+    triangle *trisToRaster = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
+    uint32_t numTrisToRaster = 0;
 
     mat4 matProj;
 
+    vec3d vCamera = {0.0f};
+
     uint32_t deltaTime;
     uint32_t elapsedTime;
-
-    uint16_t color;
-    uint8_t r, g, b;
+    float theta;
 
 public:
-    ESPCon()
+    ESPCon() {}
+
+    ~ESPCon()
     {
-        meshCube = initMeshCube();
+        freeMesh(mMesh);
+
+        free(trisToRaster);
+        trisToRaster = nullptr;
     }
 
     uint8_t setup()
@@ -134,15 +176,15 @@ public:
         // SPI speed defaults to SPI_DEFAULT_FREQ defined in the library, you can override it here
         // Note that speed allowable depends on chip and quality of wiring, if you go too fast, you
         // may end up with a black screen some times, or all the time.
-        // tft.setSPISpeed(79999999); // max tested on ESP32-S3 (80000000 produces artifacts)
+        tft.setSPISpeed(79999999); // max tested on ESP32-S3 (80000000 produces artifacts)
 
         elapsedTime = millis();
 
         float fNear = 0.1f;
         float fFar = 1000.0f;
         float fFov = 90.0f;
-        float fAspectRatio = (float)HEIGHT / WIDTH;
-        float fFovRad = 1.0f / tanf(fFov * 0.5f / 180.0f * 3.141592f);
+        float fAspectRatio = static_cast<float>(HEIGHT) / WIDTH;
+        float fFovRad = 1.0f / tan(fFov * 0.5f / 180.0f * 3.141592f);
 
         matProj.m[0][0] = fAspectRatio * fFovRad;
         matProj.m[1][1] = fFovRad;
@@ -160,43 +202,39 @@ public:
 
         deltaTime = millis() - elapsedTime;
         elapsedTime = millis();
-        float theta = static_cast<float>(elapsedTime) / 1000;
+        theta = static_cast<float>(elapsedTime) / 1000;
         // Serial.println(1000.0f/deltaTime, DEC); // FPS
-
-        r = static_cast<uint8_t>(sin(theta * 2.0f) * 31);
-        g = static_cast<uint8_t>(sin(theta * 0.7f) * 63);
-        b = static_cast<uint8_t>(sin(theta * 1.3f) * 31);
-        color = ((r << 11) | (g << 5) | b);
 
         mat4 matRotZ, matRotX;
 
         // Rotation Z
-        matRotZ.m[0][0] = cosf(theta);
-        matRotZ.m[0][1] = sinf(theta);
-        matRotZ.m[1][0] = -sinf(theta);
-        matRotZ.m[1][1] = cosf(theta);
+        matRotZ.m[0][0] = cos(theta);
+        matRotZ.m[0][1] = sin(theta);
+        matRotZ.m[1][0] = -sin(theta);
+        matRotZ.m[1][1] = cos(theta);
         matRotZ.m[2][2] = 1;
         matRotZ.m[3][3] = 1;
 
         // Rotation X
         matRotX.m[0][0] = 1;
-        matRotX.m[1][1] = cosf(theta * 0.5f);
-        matRotX.m[1][2] = sinf(theta * 0.5f);
-        matRotX.m[2][1] = -sinf(theta * 0.5f);
-        matRotX.m[2][2] = cosf(theta * 0.5f);
+        matRotX.m[1][1] = cos(theta * 0.5f);
+        matRotX.m[1][2] = sin(theta * 0.5f);
+        matRotX.m[2][1] = -sin(theta * 0.5f);
+        matRotX.m[2][2] = cos(theta * 0.5f);
         matRotX.m[3][3] = 1;
 
+        memset(trisToRaster, 0, sizeof(triangle) * mMesh->numTris);
+        numTrisToRaster = 0;
+
         // Draw triangles
-        for (uint32_t i = 0; i < meshCube->numTris; i++)
+        for (uint32_t i = 0; i < mMesh->numTris; i++)
         {
             triangle triProjected, triTranslated, triRotatedZ, triRotatedZX;
 
-            // Rotate triangles
-
             // Rotate Z
-            multiplyMatrixVector(meshCube->tris[i].p[0], triRotatedZ.p[0], matRotZ);
-            multiplyMatrixVector(meshCube->tris[i].p[1], triRotatedZ.p[1], matRotZ);
-            multiplyMatrixVector(meshCube->tris[i].p[2], triRotatedZ.p[2], matRotZ);
+            multiplyMatrixVector(mMesh->tris[i].p[0], triRotatedZ.p[0], matRotZ);
+            multiplyMatrixVector(mMesh->tris[i].p[1], triRotatedZ.p[1], matRotZ);
+            multiplyMatrixVector(mMesh->tris[i].p[2], triRotatedZ.p[2], matRotZ);
 
             // Rotate X
             multiplyMatrixVector(triRotatedZ.p[0], triRotatedZX.p[0], matRotX);
@@ -205,30 +243,83 @@ public:
 
             // Translate triangles
             triTranslated = triRotatedZX;
-            triTranslated.p[0].z = triTranslated.p[0].z + 3.0f;
-            triTranslated.p[1].z = triTranslated.p[1].z + 3.0f;
-            triTranslated.p[2].z = triTranslated.p[2].z + 3.0f;
+            triTranslated.p[0].z = triTranslated.p[0].z + 2.5f;
+            triTranslated.p[1].z = triTranslated.p[1].z + 2.5f;
+            triTranslated.p[2].z = triTranslated.p[2].z + 2.5f;
 
-            multiplyMatrixVector(triTranslated.p[0], triProjected.p[0], matProj);
-            multiplyMatrixVector(triTranslated.p[1], triProjected.p[1], matProj);
-            multiplyMatrixVector(triTranslated.p[2], triProjected.p[2], matProj);
+            // Check if side is visible
+            vec3d normal, line1, line2;
 
-            // Scale into view
-            triProjected.p[0].x += 1.0f;
-            triProjected.p[0].y += 1.0f;
-            triProjected.p[1].x += 1.0f;
-            triProjected.p[1].y += 1.0f;
-            triProjected.p[2].x += 1.0f;
-            triProjected.p[2].y += 1.0f;
+            line1.x = triTranslated.p[1].x - triTranslated.p[0].x;
+            line1.y = triTranslated.p[1].y - triTranslated.p[0].y;
+            line1.z = triTranslated.p[1].z - triTranslated.p[0].z;
 
-            triProjected.p[0].x *= 0.5f * (float)WIDTH;
-            triProjected.p[1].x *= 0.5f * (float)WIDTH;
-            triProjected.p[2].x *= 0.5f * (float)WIDTH;
-            triProjected.p[0].y *= 0.5f * (float)HEIGHT;
-            triProjected.p[1].y *= 0.5f * (float)HEIGHT;
-            triProjected.p[2].y *= 0.5f * (float)HEIGHT;
+            line2.x = triTranslated.p[2].x - triTranslated.p[0].x;
+            line2.y = triTranslated.p[2].y - triTranslated.p[0].y;
+            line2.z = triTranslated.p[2].z - triTranslated.p[0].z;
 
-            tft.drawTriangle(triProjected.p[0].x, triProjected.p[0].y, triProjected.p[1].x, triProjected.p[1].y, triProjected.p[2].x, triProjected.p[2].y, color);
+            normal.x = line1.y * line2.z - line1.z * line2.y;
+            normal.y = line1.z * line2.x - line1.x * line2.z;
+            normal.z = line1.x * line2.y - line1.y * line2.x;
+
+            float l = sqrt(pow(normal.x, 2) + pow(normal.y, 2) + pow(normal.z, 2));
+            normal.x /= l;
+            normal.y /= l;
+            normal.z /= l;
+
+            if ((normal.x * (triTranslated.p[0].x - vCamera.x) +
+                 normal.y * (triTranslated.p[0].y - vCamera.y) +
+                 normal.z * (triTranslated.p[0].z - vCamera.z)) < 0.0f)
+            {
+                // Add basic lighting
+                vec3d light_direction = {0.0f, 0.0f, -1.0f};
+
+                float l = sqrt(pow(light_direction.x, 2) + pow(light_direction.y, 2) +
+                               pow(light_direction.z, 2));
+                light_direction.x /= l;
+                light_direction.y /= l;
+                light_direction.z /= l;
+
+                float dp = normal.x * light_direction.x + normal.y * light_direction.y +
+                           normal.z * light_direction.z;
+
+                uint16_t c = getColor(dp);
+                triProjected.col = c;
+
+                multiplyMatrixVector(triTranslated.p[0], triProjected.p[0], matProj);
+                multiplyMatrixVector(triTranslated.p[1], triProjected.p[1], matProj);
+                multiplyMatrixVector(triTranslated.p[2], triProjected.p[2], matProj);
+
+                // Scale into view
+                triProjected.p[0].x += 1.0f;
+                triProjected.p[0].y += 1.0f;
+                triProjected.p[1].x += 1.0f;
+                triProjected.p[1].y += 1.0f;
+                triProjected.p[2].x += 1.0f;
+                triProjected.p[2].y += 1.0f;
+
+                triProjected.p[0].x *= 0.5f * static_cast<float>(WIDTH);
+                triProjected.p[1].x *= 0.5f * static_cast<float>(WIDTH);
+                triProjected.p[2].x *= 0.5f * static_cast<float>(WIDTH);
+                triProjected.p[0].y *= 0.5f * static_cast<float>(HEIGHT);
+                triProjected.p[1].y *= 0.5f * static_cast<float>(HEIGHT);
+                triProjected.p[2].y *= 0.5f * static_cast<float>(HEIGHT);
+
+                trisToRaster[numTrisToRaster++] = triProjected;
+            }
+        }
+
+        // Sort triangles by depth (from back to front)
+        qsort(trisToRaster, numTrisToRaster, sizeof(triangle), compareTris);
+
+        for (uint32_t i = 0; i < numTrisToRaster; i++)
+        {
+            tft.fillTriangle(trisToRaster[i].p[0].x, trisToRaster[i].p[0].y, trisToRaster[i].p[1].x, trisToRaster[i].p[1].y, trisToRaster[i].p[2].x, trisToRaster[i].p[2].y, trisToRaster[i].col);
+        }
+
+        if (FRAME_DELAY > deltaTime)
+        {
+            delay(FRAME_DELAY - deltaTime);
         }
     }
 };

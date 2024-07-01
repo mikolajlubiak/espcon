@@ -2,10 +2,6 @@
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
 
-#include <iostream>
-#include <vector>
-#include <cmath>
-
 #define TFT_CS 10
 #define TFT_RST 9
 #define TFT_DC 8
@@ -26,15 +22,77 @@ struct triangle
 
 struct mesh
 {
-  std::vector<triangle> tris;
+  triangle *tris;
+  size_t numTris;
 };
+
+mesh *allocMesh(size_t numTris)
+{
+  mesh *mMesh = (mesh *)malloc(sizeof(mesh));
+  mMesh->tris = (triangle *)malloc(sizeof(triangle) * numTris);
+  mMesh->numTris = numTris;
+  return mMesh;
+}
+
+void freeMesh(mesh *mMesh)
+{
+  free(mMesh->tris);
+  free(mMesh);
+}
+
+mesh *initMeshCube()
+{
+  uint16_t numTris = 12;
+
+  mesh *mMesh = (mesh *)malloc(sizeof(mesh));
+  mMesh->tris = (triangle *)malloc(sizeof(triangle) * numTris);
+  mMesh->numTris = numTris;
+
+  // Clear existing triangles
+  // Cube vertices
+  vec3d vertices[8] = {
+      {0.0f, 0.0f, 0.0f}, // 0 - bottom-left-back
+      {1.0f, 0.0f, 0.0f}, // 1 - bottom-right-front
+      {1.0f, 0.0f, 1.0f}, // 2 - top-right-front
+      {0.0f, 0.0f, 1.0f}, // 3 - top-left-back
+      {0.0f, 1.0f, 0.0f}, // 4 - bottom-left-front
+      {1.0f, 1.0f, 0.0f}, // 5 - bottom-right-back
+      {1.0f, 1.0f, 1.0f}, // 6 - top-right-back
+      {0.0f, 1.0f, 1.0f}  // 7 - top-left-front
+  };
+
+  // Triangle indices
+  int triIndices[numTris][3] = {
+      {0, 1, 2}, {0, 2, 3}, // Front face
+      {4, 5, 6},
+      {4, 6, 7}, // Back face
+      {1, 5, 6},
+      {1, 6, 2}, // Right face
+      {0, 4, 7},
+      {0, 7, 3}, // Left face
+      {3, 7, 6},
+      {3, 6, 2}, // Top face
+      {1, 0, 3},
+      {1, 3, 5} // Bottom face
+  };
+
+  // Assign vertices to triangles
+  for (size_t i = 0; i < numTris; ++i)
+  {
+    mMesh->tris[i].p[0] = vertices[triIndices[i][0]];
+    mMesh->tris[i].p[1] = vertices[triIndices[i][1]];
+    mMesh->tris[i].p[2] = vertices[triIndices[i][2]];
+  }
+
+  return mMesh;
+}
 
 struct mat4
 {
   float m[4][4] = {0};
 };
 
-mesh meshCube;
+mesh *meshCube = initMeshCube();
 
 mat4 matProj;
 
@@ -72,33 +130,6 @@ void setup()
 
   elapsedTime = millis();
 
-  meshCube.tris = {
-      // SOUTH
-      {0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f},
-      {0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f},
-
-      // EAST
-      {1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f},
-      {1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f},
-
-      // NORTH
-      {1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f},
-      {1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f},
-
-      // WEST
-      {0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f},
-      {0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f},
-
-      // TOP
-      {0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f},
-      {0.0f, 1.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f},
-
-      // BOTTOM
-      {1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f},
-      {1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
-
-  };
-
   float fNear = 0.1f;
   float fFar = 1000.0f;
   float fFov = 90.0f;
@@ -122,7 +153,7 @@ void loop()
   // Serial.println(1000.0f/deltaTime, DEC); // FPS
 
   r = (r + 1) % 32;
-  color = ((r << 11) | (0 << 5) | 31 - r);
+  color = ((r << 11) | (0 << 5) | (31 - r));
 
   mat4 matRotZ, matRotX;
 
@@ -145,16 +176,16 @@ void loop()
   matRotX.m[3][3] = 1;
 
   // Draw triangles
-  for (triangle tri : meshCube.tris)
+  for (uint32_t i = 0; i < meshCube->numTris; i++)
   {
     triangle triProjected, triTranslated, triRotatedZ, triRotatedZX;
 
     // Rotate triangles
 
     // Rotate Z
-    MultiplyMatrixVector(tri.p[0], triRotatedZ.p[0], matRotZ);
-    MultiplyMatrixVector(tri.p[1], triRotatedZ.p[1], matRotZ);
-    MultiplyMatrixVector(tri.p[2], triRotatedZ.p[2], matRotZ);
+    MultiplyMatrixVector(meshCube->tris[i].p[0], triRotatedZ.p[0], matRotZ);
+    MultiplyMatrixVector(meshCube->tris[i].p[1], triRotatedZ.p[1], matRotZ);
+    MultiplyMatrixVector(meshCube->tris[i].p[2], triRotatedZ.p[2], matRotZ);
 
     // Rotate X
     MultiplyMatrixVector(triRotatedZ.p[0], triRotatedZX.p[0], matRotX);

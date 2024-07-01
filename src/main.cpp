@@ -28,8 +28,8 @@ struct mesh
 
 mesh *allocMesh(size_t numTris)
 {
-  mesh *mMesh = (mesh *)malloc(sizeof(mesh));
-  mMesh->tris = (triangle *)malloc(sizeof(triangle) * numTris);
+  mesh *mMesh = reinterpret_cast<mesh *>(malloc(sizeof(mesh)));
+  mMesh->tris = reinterpret_cast<triangle *>(malloc(sizeof(triangle) * numTris));
   mMesh->numTris = numTris;
   return mMesh;
 }
@@ -44,12 +44,12 @@ mesh *initMeshCube()
 {
   uint32_t numTris = 12;
 
-  mesh *mMesh = (mesh *)malloc(sizeof(mesh));
-  mMesh->tris = (triangle *)malloc(sizeof(triangle) * numTris);
+  mesh *mMesh = reinterpret_cast<mesh *>(malloc(sizeof(mesh)));
+  mMesh->tris = reinterpret_cast<triangle *>(malloc(sizeof(triangle) * numTris));
   mMesh->numTris = numTris;
 
   // Cube vertices
-  vec3d vertices[8] = {
+  const vec3d vertices[8] = {
       {0.0f, 0.0f, 0.0f}, // 0 - bottom-left-back
       {1.0f, 0.0f, 0.0f}, // 1 - bottom-right-front
       {1.0f, 0.0f, 1.0f}, // 2 - top-right-front
@@ -102,7 +102,7 @@ uint32_t elapsedTime;
 uint16_t color;
 uint8_t r, g, b;
 
-void MultiplyMatrixVector(vec3d &i, vec3d &o, mat4 &m)
+void MultiplyMatrixVector(const vec3d &i, vec3d &o, const mat4 &m)
 {
   o.x = i.x * m.m[0][0] + i.y * m.m[1][0] + i.z * m.m[2][0] + m.m[3][0];
   o.y = i.x * m.m[0][1] + i.y * m.m[1][1] + i.z * m.m[2][1] + m.m[3][1];
@@ -150,12 +150,12 @@ void loop()
 
   deltaTime = millis() - elapsedTime;
   elapsedTime = millis();
-  float theta = (float)elapsedTime / 1000;
+  float theta = static_cast<float>(elapsedTime) / 1000;
   // Serial.println(1000.0f/deltaTime, DEC); // FPS
 
-  r = sin(theta * 2.0f) * 31;
-  g = sin(theta * 0.7f) * 63;
-  b = sin(theta * 1.3f) * 31;
+  r = static_cast<uint8_t>(sin(theta * 2.0f) * 31);
+  g = static_cast<uint8_t>(sin(theta * 0.7f) * 63);
+  b = static_cast<uint8_t>(sin(theta * 1.3f) * 31);
   color = ((r << 11) | (g << 5) | b);
 
   mat4 matRotZ, matRotX;

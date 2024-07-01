@@ -23,7 +23,7 @@ struct triangle
 struct mesh
 {
   triangle *tris;
-  size_t numTris;
+  uint32_t numTris;
 };
 
 mesh *allocMesh(size_t numTris)
@@ -42,13 +42,12 @@ void freeMesh(mesh *mMesh)
 
 mesh *initMeshCube()
 {
-  uint16_t numTris = 12;
+  uint32_t numTris = 12;
 
   mesh *mMesh = (mesh *)malloc(sizeof(mesh));
   mMesh->tris = (triangle *)malloc(sizeof(triangle) * numTris);
   mMesh->numTris = numTris;
 
-  // Clear existing triangles
   // Cube vertices
   vec3d vertices[8] = {
       {0.0f, 0.0f, 0.0f}, // 0 - bottom-left-back
@@ -63,7 +62,8 @@ mesh *initMeshCube()
 
   // Triangle indices
   int triIndices[numTris][3] = {
-      {0, 1, 2}, {0, 2, 3}, // Front face
+      {0, 1, 2},
+      {0, 2, 3}, // Front face
       {4, 5, 6},
       {4, 6, 7}, // Back face
       {1, 5, 6},
@@ -126,7 +126,7 @@ void setup()
   // SPI speed defaults to SPI_DEFAULT_FREQ defined in the library, you can override it here
   // Note that speed allowable depends on chip and quality of wiring, if you go too fast, you
   // may end up with a black screen some times, or all the time.
-  // tft.setSPISpeed(40000000);
+  // tft.setSPISpeed(79999999); // max tested on ESP32-S3 (80000000 produces artifacts)
 
   elapsedTime = millis();
 

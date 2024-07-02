@@ -1,7 +1,11 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
-#include <LittleFS.h>
+
+#include <cstdint>
+#include <cmath>
+
+#include "models.h"
 
 #define TFT_CS 10
 #define TFT_RST 9
@@ -43,18 +47,17 @@ mesh *allocMesh(uint32_t numTris)
 
 void freeMesh(mesh *mMesh)
 {
-    // Check if the triangle array pointer is not NULL before freeing it
+    // Check if the triangle array pointer is not nullptr before freeing it
     if (mMesh && mMesh->tris)
     {
         free(mMesh->tris);
         mMesh->tris = nullptr;
     }
 
-    // Check if the mesh pointer itself is not NULL before freeing it
+    // Check if the mesh pointer itself is not nullptr before freeing it
     if (mMesh)
     {
         free(mMesh);
-        mMesh = nullptr;
     }
 }
 
@@ -109,16 +112,31 @@ mesh *initMeshCube()
     return mMesh;
 }
 
-mesh *loadObj(const char *path)
+char *sgets(char *buffer, const uint32_t buffer_size, const unsigned char **strp, const uint32_t str_size)
+{
+    if ((**strp == '\0') | (reinterpret_cast<uint32_t>(strp) > reinterpret_cast<uint32_t>(*strp + str_size)))
+        return nullptr;
+    int i;
+    for (i = 0; i < buffer_size - 1; ++i, ++(*strp))
+    {
+        buffer[i] = **strp;
+        if (**strp == '\0')
+            break;
+        if (**strp == '\n')
+        {
+            buffer[i + 1] = '\0';
+            ++(*strp);
+            break;
+        }
+    }
+    if (i == buffer_size - 1)
+        buffer[i] = '\0';
+    return buffer;
+}
+
+mesh *loadObj(const unsigned char *model, uint32_t len)
 {
     mesh *mMesh = reinterpret_cast<mesh *>(calloc(1, sizeof(mesh)));
-
-    File file = LittleFS.open(path);
-    if (!file)
-    {
-        Serial.println("Failed to open file for reading");
-        return nullptr;
-    }
 
     mMesh->numTris = 512;
     mMesh->tris = reinterpret_cast<triangle *>(calloc(512, sizeof(triangle)));
@@ -126,25 +144,25 @@ mesh *loadObj(const char *path)
     vec3d *verts = reinterpret_cast<vec3d *>(calloc(1024, sizeof(vec3d)));
     uint32_t numVerts = 0;
 
-    while (file.available())
-    {
-        char line[128];
-        file.readBytes(line, 128);
+    char buff[128];
+    const unsigned char **p = reinterpret_cast<const unsigned char **>(&model);
 
-        if (line[0] == 'v')
+    while (NULL != sgets(buff, sizeof(buff), p, len))
+    {
+        Serial.println(buff);
+
+        if (buff[0] == 'v')
         {
-            sscanf(line + 2, "%f %f %f", &verts[numVerts].x, &verts[numVerts].y, &verts[numVerts].z);
+            sscanf(buff + 2, "%f %f %f", &verts[numVerts].x, &verts[numVerts].y, &verts[numVerts].z);
             numVerts++;
         }
-        else if (line[0] == 'f')
+        else if (buff[0] == 'f')
         {
             int f[3];
-            sscanf(line + 2, "%d %d %d", &f[0], &f[1], &f[2]);
+            sscanf(buff + 2, "%d %d %d", &f[0], &f[1], &f[2]);
             mMesh->tris[mMesh->numTris++] = {verts[f[0] - 1], verts[f[1] - 1], verts[f[2] - 1]};
         }
     }
-
-    file.close();
 
     return mMesh;
 }
@@ -184,7 +202,7 @@ class ESPCon
 {
     Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
-    mesh *mMesh = loadObj("/ship.obj");
+    mesh *mMesh = loadObj(ship_obj, ship_obj_len);
 
     triangle *trisToRaster = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
     uint32_t numTrisToRaster = 0;
@@ -195,14 +213,18 @@ class ESPCon
 
     uint32_t deltaTime;
     uint32_t elapsedTime;
-    float theta;
+    float theta = 0.0f;
 
 public:
-    ESPCon() {}
+    ESPCon()
+    {
+        Serial.begin(9600);
+    }
 
     ~ESPCon()
     {
         freeMesh(mMesh);
+        mMesh = nullptr;
 
         free(trisToRaster);
         trisToRaster = nullptr;
@@ -210,14 +232,6 @@ public:
 
     uint8_t setup()
     {
-        Serial.begin(9600);
-
-        if (!LittleFS.begin(true))
-        {
-            Serial.println("An Error has occurred while mounting SPIFFS");
-            return 1;
-        }
-
         tft.initR(INITR_144GREENTAB);
 
         // SPI speed defaults to SPI_DEFAULT_FREQ defined in the library, you can override it here
@@ -250,7 +264,7 @@ public:
         deltaTime = millis() - elapsedTime;
         elapsedTime = millis();
         theta = static_cast<float>(elapsedTime) / 1000;
-        // Serial.println(1000.0f/deltaTime, DEC); // FPS
+        // Serial.println(1000.0f / deltaTime, DEC); // FPS
 
         mat4 matRotZ, matRotX;
 
@@ -270,7 +284,6 @@ public:
         matRotX.m[2][2] = cos(theta * 0.5f);
         matRotX.m[3][3] = 1;
 
-        memset(trisToRaster, 0, sizeof(triangle) * mMesh->numTris);
         numTrisToRaster = 0;
 
         // Draw triangles
@@ -309,10 +322,10 @@ public:
             normal.y = line1.z * line2.x - line1.x * line2.z;
             normal.z = line1.x * line2.y - line1.y * line2.x;
 
-            float l = sqrt(pow(normal.x, 2) + pow(normal.y, 2) + pow(normal.z, 2));
-            normal.x /= l;
-            normal.y /= l;
-            normal.z /= l;
+            float normal_length = sqrt(pow(normal.x, 2) + pow(normal.y, 2) + pow(normal.z, 2));
+            normal.x /= normal_length;
+            normal.y /= normal_length;
+            normal.z /= normal_length;
 
             if ((normal.x * (triTranslated.p[0].x - vCamera.x) +
                  normal.y * (triTranslated.p[0].y - vCamera.y) +
@@ -321,11 +334,11 @@ public:
                 // Add basic lighting
                 vec3d light_direction = {0.0f, 0.0f, -1.0f};
 
-                float l = sqrt(pow(light_direction.x, 2) + pow(light_direction.y, 2) +
-                               pow(light_direction.z, 2));
-                light_direction.x /= l;
-                light_direction.y /= l;
-                light_direction.z /= l;
+                float light_direction_length = sqrt(pow(light_direction.x, 2) + pow(light_direction.y, 2) +
+                                                    pow(light_direction.z, 2));
+                light_direction.x /= light_direction_length;
+                light_direction.y /= light_direction_length;
+                light_direction.z /= light_direction_length;
 
                 float dp = normal.x * light_direction.x + normal.y * light_direction.y +
                            normal.z * light_direction.z;

@@ -1,0 +1,4 @@
+To generate object header files use:
+```
+xxd -i PATH/TO/OBJ/filename.obj
+```

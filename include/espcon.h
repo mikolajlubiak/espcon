@@ -1,6 +1,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
+#include <LittleFS.h>
 
 #define TFT_CS 10
 #define TFT_RST 9
@@ -108,6 +109,46 @@ mesh *initMeshCube()
     return mMesh;
 }
 
+mesh *loadObj(const char *path)
+{
+    mesh *mMesh = reinterpret_cast<mesh *>(calloc(1, sizeof(mesh)));
+
+    File file = LittleFS.open(path);
+    if (!file)
+    {
+        Serial.println("Failed to open file for reading");
+        return nullptr;
+    }
+
+    mMesh->numTris = 512;
+    mMesh->tris = reinterpret_cast<triangle *>(calloc(512, sizeof(triangle)));
+
+    vec3d *verts = reinterpret_cast<vec3d *>(calloc(1024, sizeof(vec3d)));
+    uint32_t numVerts = 0;
+
+    while (file.available())
+    {
+        char line[128];
+        file.readBytes(line, 128);
+
+        if (line[0] == 'v')
+        {
+            sscanf(line + 2, "%f %f %f", &verts[numVerts].x, &verts[numVerts].y, &verts[numVerts].z);
+            numVerts++;
+        }
+        else if (line[0] == 'f')
+        {
+            int f[3];
+            sscanf(line + 2, "%d %d %d", &f[0], &f[1], &f[2]);
+            mMesh->tris[mMesh->numTris++] = {verts[f[0] - 1], verts[f[1] - 1], verts[f[2] - 1]};
+        }
+    }
+
+    file.close();
+
+    return mMesh;
+}
+
 void multiplyMatrixVector(const vec3d &i, vec3d &o, const mat4 &m)
 {
     o.x = i.x * m.m[0][0] + i.y * m.m[1][0] + i.z * m.m[2][0] + m.m[3][0];
@@ -143,7 +184,7 @@ class ESPCon
 {
     Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
-    mesh *mMesh = initMeshCube();
+    mesh *mMesh = loadObj("/ship.obj");
 
     triangle *trisToRaster = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
     uint32_t numTrisToRaster = 0;
@@ -170,6 +211,12 @@ public:
     uint8_t setup()
     {
         Serial.begin(9600);
+
+        if (!LittleFS.begin(true))
+        {
+            Serial.println("An Error has occurred while mounting SPIFFS");
+            return 1;
+        }
 
         tft.initR(INITR_144GREENTAB);
 
@@ -243,9 +290,9 @@ public:
 
             // Translate triangles
             triTranslated = triRotatedZX;
-            triTranslated.p[0].z = triTranslated.p[0].z + 2.5f;
-            triTranslated.p[1].z = triTranslated.p[1].z + 2.5f;
-            triTranslated.p[2].z = triTranslated.p[2].z + 2.5f;
+            triTranslated.p[0].z = triTranslated.p[0].z + 8.0f;
+            triTranslated.p[1].z = triTranslated.p[1].z + 8.0f;
+            triTranslated.p[2].z = triTranslated.p[2].z + 8.0f;
 
             // Check if side is visible
             vec3d normal, line1, line2;

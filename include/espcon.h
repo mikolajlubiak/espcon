@@ -3,34 +3,25 @@
 #include <SPI.h>
 #include <LittleFS.h>
 
-#define TFT_CS 10
-#define TFT_RST 9
-#define TFT_DC 8
+constexpr uint8_t tftCS = 10;
+constexpr uint8_t tftRST = 9;
+constexpr uint8_t tftDC = 8;
 
-#define HEIGHT 128
-#define WIDTH 128
+constexpr uint16_t height = 128;
+constexpr uint16_t width = 128;
 
-#define FPS 60
-#define FRAME_DELAY 1000 / FPS
-
-#define NUM_LOAD_VERTS 512
-#define NUM_LOAD_TRIS 1024
-#define NUM_LOAD_CHARS 128
+constexpr uint16_t fps = 60;
+constexpr float frame_delay = static_cast<float>(fps) / 1000;
 
 struct color
 {
-    uint8_t r, g, b;
+    unsigned int r : 5;
+    unsigned int g : 6;
+    unsigned int b : 5;
 
     uint16_t load()
     {
         return ((r << 11) | (g << 5) | b);
-    }
-
-    void store(uint8_t r, uint8_t g, uint8_t b)
-    {
-        this->r = r / 255 * 31;
-        this->g = g / 255 * 63;
-        this->b = b / 255 * 31;
     }
 };
 
@@ -133,6 +124,10 @@ mesh *initMeshCube()
 
 mesh *loadObj(const char *path)
 {
+    constexpr uint32_t numLoadVerts = 512;
+    constexpr uint32_t numLoadTris = 1024;
+    constexpr uint32_t numLoadChars = 128;
+
     mesh *mMesh = reinterpret_cast<mesh *>(calloc(1, sizeof(mesh)));
 
     File file = LittleFS.open(path);
@@ -142,15 +137,15 @@ mesh *loadObj(const char *path)
         return nullptr;
     }
 
-    mMesh->numTris = NUM_LOAD_TRIS;
+    mMesh->numTris = numLoadTris;
     mMesh->tris = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
     uint32_t numFilledTris = 0;
 
-    uint32_t numAllocVerts = NUM_LOAD_VERTS;
+    uint32_t numAllocVerts = numLoadVerts;
     vec3d *verts = reinterpret_cast<vec3d *>(calloc(numAllocVerts, sizeof(vec3d)));
     uint32_t numFilledVerts = 0;
 
-    char *line = reinterpret_cast<char *>(calloc(NUM_LOAD_CHARS, sizeof(char)));
+    char *line = reinterpret_cast<char *>(calloc(numLoadChars, sizeof(char)));
     uint32_t numFilledChars = 0;
     bool isNewLine = true;
 
@@ -184,7 +179,7 @@ mesh *loadObj(const char *path)
                         mMesh->tris = reinterpret_cast<triangle *>(realloc(mMesh->tris, mMesh->numTris * sizeof(triangle)));
                     }
                 }
-                memset(line, 0, NUM_LOAD_CHARS * sizeof(char));
+                memset(line, 0, numLoadChars * sizeof(char));
                 numFilledChars = 0;
             }
             isNewLine = true;
@@ -288,7 +283,7 @@ uint16_t getColor(float lum, color col)
 
 class ESPCon
 {
-    Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
+    Adafruit_ST7735 tft = Adafruit_ST7735(tftCS, tftDC, tftRST);
 
     mesh *mMesh;
 
@@ -340,7 +335,7 @@ public:
         float fNear = 0.1f;
         float fFar = 1000.0f;
         float fFov = 90.0f;
-        float fAspectRatio = static_cast<float>(HEIGHT) / WIDTH;
+        float fAspectRatio = static_cast<float>(height) / width;
         float fFovRad = 1.0f / tan(fFov * 0.5f / 180.0f * 3.141592f);
 
         matProj.m[0][0] = fAspectRatio * fFovRad;
@@ -463,12 +458,12 @@ public:
                 triProjected.p[2].x += 1.0f;
                 triProjected.p[2].y += 1.0f;
 
-                triProjected.p[0].x *= 0.5f * static_cast<float>(WIDTH);
-                triProjected.p[1].x *= 0.5f * static_cast<float>(WIDTH);
-                triProjected.p[2].x *= 0.5f * static_cast<float>(WIDTH);
-                triProjected.p[0].y *= 0.5f * static_cast<float>(HEIGHT);
-                triProjected.p[1].y *= 0.5f * static_cast<float>(HEIGHT);
-                triProjected.p[2].y *= 0.5f * static_cast<float>(HEIGHT);
+                triProjected.p[0].x *= 0.5f * static_cast<float>(width);
+                triProjected.p[1].x *= 0.5f * static_cast<float>(width);
+                triProjected.p[2].x *= 0.5f * static_cast<float>(width);
+                triProjected.p[0].y *= 0.5f * static_cast<float>(height);
+                triProjected.p[1].y *= 0.5f * static_cast<float>(height);
+                triProjected.p[2].y *= 0.5f * static_cast<float>(height);
 
                 trisToRaster[numTrisToRaster++] = triProjected;
             }
@@ -482,9 +477,9 @@ public:
             tft.fillTriangle(trisToRaster[i].p[0].x, trisToRaster[i].p[0].y, trisToRaster[i].p[1].x, trisToRaster[i].p[1].y, trisToRaster[i].p[2].x, trisToRaster[i].p[2].y, trisToRaster[i].col);
         }
 
-        if (FRAME_DELAY > deltaTime)
+        if (frame_delay > deltaTime)
         {
-            delay(FRAME_DELAY - deltaTime);
+            delay(frame_delay - deltaTime);
         }
     }
 };

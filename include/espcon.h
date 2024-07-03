@@ -6,10 +6,33 @@
 #define TFT_CS 10
 #define TFT_RST 9
 #define TFT_DC 8
+
 #define HEIGHT 128
 #define WIDTH 128
-#define FPS 30
+
+#define FPS 60
 #define FRAME_DELAY 1000 / FPS
+
+#define NUM_LOAD_VERTS 512
+#define NUM_LOAD_TRIS 1024
+#define NUM_LOAD_CHARS 128
+
+struct color
+{
+    uint8_t r, g, b;
+
+    uint16_t load()
+    {
+        return ((r << 11) | (g << 5) | b);
+    }
+
+    void store(uint8_t r, uint8_t g, uint8_t b)
+    {
+        this->r = r / 255 * 31;
+        this->g = g / 255 * 63;
+        this->b = b / 255 * 31;
+    }
+};
 
 struct vec3d
 {
@@ -54,7 +77,6 @@ void freeMesh(mesh *mMesh)
     if (mMesh)
     {
         free(mMesh);
-        mMesh = nullptr;
     }
 }
 
@@ -120,33 +142,119 @@ mesh *loadObj(const char *path)
         return nullptr;
     }
 
-    mMesh->numTris = 512;
-    mMesh->tris = reinterpret_cast<triangle *>(calloc(512, sizeof(triangle)));
+    mMesh->numTris = NUM_LOAD_TRIS;
+    mMesh->tris = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
+    uint32_t numFilledTris = 0;
 
-    vec3d *verts = reinterpret_cast<vec3d *>(calloc(1024, sizeof(vec3d)));
-    uint32_t numVerts = 0;
+    uint32_t numAllocVerts = NUM_LOAD_VERTS;
+    vec3d *verts = reinterpret_cast<vec3d *>(calloc(numAllocVerts, sizeof(vec3d)));
+    uint32_t numFilledVerts = 0;
+
+    char *line = reinterpret_cast<char *>(calloc(NUM_LOAD_CHARS, sizeof(char)));
+    uint32_t numFilledChars = 0;
+    bool isNewLine = true;
 
     while (file.available())
     {
-        char line[128];
-        file.readBytes(line, 128);
+        char c = file.read();
 
-        if (line[0] == 'v')
+        if (c == '\n')
         {
-            sscanf(line + 2, "%f %f %f", &verts[numVerts].x, &verts[numVerts].y, &verts[numVerts].z);
-            numVerts++;
+            if (!isNewLine)
+            {
+                if (line[0] == 'v')
+                {
+                    sscanf(line + 2, "%f %f %f", &verts[numFilledVerts].x, &verts[numFilledVerts].y, &verts[numFilledVerts].z);
+                    numFilledVerts++;
+                    if (numFilledVerts > numAllocVerts)
+                    {
+                        numAllocVerts = numAllocVerts * 2;
+                        verts = reinterpret_cast<vec3d *>(realloc(verts, numAllocVerts * sizeof(vec3d)));
+                    }
+                }
+                else if (line[0] == 'f')
+                {
+                    int f[3];
+                    sscanf(line + 2, "%d %d %d", &f[0], &f[1], &f[2]);
+                    mMesh->tris[numFilledTris] = {verts[f[0] - 1], verts[f[1] - 1], verts[f[2] - 1]};
+                    numFilledTris++;
+                    if (numFilledTris > mMesh->numTris)
+                    {
+                        mMesh->numTris = mMesh->numTris * 2;
+                        mMesh->tris = reinterpret_cast<triangle *>(realloc(mMesh->tris, mMesh->numTris * sizeof(triangle)));
+                    }
+                }
+                memset(line, 0, sizeof(line));
+                numFilledChars = 0;
+            }
+            isNewLine = true;
         }
-        else if (line[0] == 'f')
+        else
         {
-            int f[3];
-            sscanf(line + 2, "%d %d %d", &f[0], &f[1], &f[2]);
-            mMesh->tris[mMesh->numTris++] = {verts[f[0] - 1], verts[f[1] - 1], verts[f[2] - 1]};
+            if (isNewLine)
+            {
+                isNewLine = false;
+            }
+            line[numFilledChars] = c;
+            numFilledChars++;
         }
     }
 
     file.close();
 
     return mMesh;
+}
+
+void listDir(const char *dirname, uint8_t levels)
+{
+    Serial.printf("Listing directory: %s\r\n", dirname);
+
+    File root = LittleFS.open(dirname);
+    if (!root)
+    {
+        Serial.println("- failed to open directory");
+        return;
+    }
+    if (!root.isDirectory())
+    {
+        Serial.println(" - not a directory");
+        return;
+    }
+
+    File file = root.openNextFile();
+    while (file)
+    {
+        if (file.isDirectory())
+        {
+            Serial.print("  DIR : ");
+
+            Serial.print(file.name());
+            time_t t = file.getLastWrite();
+            struct tm *tmstruct = localtime(&t);
+            Serial.printf(
+                "  LAST WRITE: %d-%02d-%02d %02d:%02d:%02d\n", (tmstruct->tm_year) + 1900, (tmstruct->tm_mon) + 1, tmstruct->tm_mday, tmstruct->tm_hour,
+                tmstruct->tm_min, tmstruct->tm_sec);
+
+            if (levels)
+            {
+                listDir(file.name(), levels - 1);
+            }
+        }
+        else
+        {
+            Serial.print("  FILE: ");
+            Serial.print(file.name());
+            Serial.print("  SIZE: ");
+
+            Serial.print(file.size());
+            time_t t = file.getLastWrite();
+            struct tm *tmstruct = localtime(&t);
+            Serial.printf(
+                "  LAST WRITE: %d-%02d-%02d %02d:%02d:%02d\n", (tmstruct->tm_year) + 1900, (tmstruct->tm_mon) + 1, tmstruct->tm_mday, tmstruct->tm_hour,
+                tmstruct->tm_min, tmstruct->tm_sec);
+        }
+        file = root.openNextFile();
+    }
 }
 
 void multiplyMatrixVector(const vec3d &i, vec3d &o, const mat4 &m)
@@ -173,20 +281,21 @@ int compareTris(const void *t1Ptr, const void *t2Ptr)
     return z1 > z2;
 }
 
-uint16_t getColor(float lum)
+uint16_t getColor(float lum, color col)
 {
-    int rb = max(lum, 0.20f) * 31;
-    int g = max(lum, 0.20f) * 63;
-    return ((rb << 11) | (g << 5) | rb);
+    int r = max(lum, 0.50f) * col.r;
+    int g = max(lum, 0.50f) * col.g;
+    int b = max(lum, 0.50f) * col.b;
+    return ((r << 11) | (g << 5) | b);
 }
 
 class ESPCon
 {
     Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
-    mesh *mMesh = loadObj("/ship.obj");
+    mesh *mMesh;
 
-    triangle *trisToRaster = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
+    triangle *trisToRaster;
     uint32_t numTrisToRaster = 0;
 
     mat4 matProj;
@@ -195,7 +304,10 @@ class ESPCon
 
     uint32_t deltaTime;
     uint32_t elapsedTime;
+    uint32_t lastTime;
     float theta;
+
+    color col;
 
 public:
     ESPCon() {}
@@ -203,6 +315,7 @@ public:
     ~ESPCon()
     {
         freeMesh(mMesh);
+        mMesh = nullptr;
 
         free(trisToRaster);
         trisToRaster = nullptr;
@@ -214,7 +327,7 @@ public:
 
         if (!LittleFS.begin(true))
         {
-            Serial.println("An Error has occurred while mounting SPIFFS");
+            Serial.println("An Error has occurred while mounting LittleFS");
             return 1;
         }
 
@@ -240,6 +353,9 @@ public:
         matProj.m[2][3] = 1.0f;
         matProj.m[3][3] = 0.0f;
 
+        mMesh = loadObj("/littlefs/ship.obj");
+        trisToRaster = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
+
         return 0;
     }
 
@@ -247,10 +363,15 @@ public:
     {
         tft.fillScreen(ST77XX_BLACK);
 
-        deltaTime = millis() - elapsedTime;
+        lastTime = elapsedTime;
         elapsedTime = millis();
+        deltaTime = elapsedTime - lastTime;
         theta = static_cast<float>(elapsedTime) / 1000;
         // Serial.println(1000.0f/deltaTime, DEC); // FPS
+
+        col.r = sin(theta * 2.0f) * 31;
+        col.g = sin(theta * 0.7f) * 63;
+        col.b = sin(theta * 1.3f) * 31;
 
         mat4 matRotZ, matRotX;
 
@@ -330,7 +451,7 @@ public:
                 float dp = normal.x * light_direction.x + normal.y * light_direction.y +
                            normal.z * light_direction.z;
 
-                uint16_t c = getColor(dp);
+                uint16_t c = getColor(dp, col);
                 triProjected.col = c;
 
                 multiplyMatrixVector(triTranslated.p[0], triProjected.p[0], matProj);

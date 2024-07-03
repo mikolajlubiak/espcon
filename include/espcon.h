@@ -15,9 +15,9 @@ constexpr float frame_delay = static_cast<float>(fps) / 1000;
 
 struct color
 {
-    unsigned int r : 5;
-    unsigned int g : 6;
-    unsigned int b : 5;
+    unsigned char r : 5;
+    unsigned char g : 6;
+    unsigned char b : 5;
 
     uint16_t load()
     {

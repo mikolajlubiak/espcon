@@ -9,15 +9,20 @@ constexpr uint8_t tftDC = 8;
 
 constexpr uint16_t height = 128;
 constexpr uint16_t width = 128;
+constexpr float aspectRatio = static_cast<float>(height) /
+                              static_cast<float>(width);
 
 constexpr uint16_t fps = 60;
 constexpr float frame_delay = static_cast<float>(fps) / 1000;
 
 struct color
 {
-    unsigned char r : 5;
-    unsigned char g : 6;
-    unsigned char b : 5;
+    uint8_t r : 5;
+    uint8_t g : 6;
+    uint8_t b : 5;
+
+    color() : r(0), g(0), b(0) {}
+    color(const uint8_t r, const uint8_t g, const uint8_t b) : r(r), g(g), b(b) {}
 
     uint16_t load()
     {
@@ -25,20 +30,244 @@ struct color
     }
 };
 
-struct vec3d
-{
-    float x, y, z;
-};
-
 struct mat4
 {
-    float m[4][4] = {0.0f};
+    float m[4][4] = {{0.0f}};
+
+    void identity()
+    {
+        this->m[0][0] = 1.0f;
+        this->m[1][1] = 1.0f;
+        this->m[2][2] = 1.0f;
+        this->m[3][3] = 1.0f;
+    }
+
+    void rotation_x(const float fAngleRad)
+    {
+        this->m[0][0] = 1.0f;
+        this->m[3][3] = 1.0f;
+        this->m[1][1] = cos(fAngleRad);
+        this->m[2][2] = cos(fAngleRad);
+        this->m[1][2] = sin(fAngleRad);
+        this->m[2][1] = -sin(fAngleRad);
+    }
+
+    void rotation_y(const float fAngleRad)
+    {
+        this->m[1][1] = 1.0f;
+        this->m[3][3] = 1.0f;
+        this->m[0][0] = cos(fAngleRad);
+        this->m[2][2] = cos(fAngleRad);
+        this->m[0][2] = sin(fAngleRad);
+        this->m[2][0] = -sin(fAngleRad);
+    }
+
+    void rotation_z(const float fAngleRad)
+    {
+        this->m[2][2] = 1.0f;
+        this->m[3][3] = 1.0f;
+        this->m[0][0] = cos(fAngleRad);
+        this->m[1][1] = cos(fAngleRad);
+        this->m[0][1] = sin(fAngleRad);
+        this->m[1][0] = -sin(fAngleRad);
+    }
+
+    void translation(const float x, const float y, const float z)
+    {
+        this->m[0][0] = 1.0f;
+        this->m[1][1] = 1.0f;
+        this->m[2][2] = 1.0f;
+        this->m[3][3] = 1.0f;
+        this->m[3][0] = x;
+        this->m[3][1] = y;
+        this->m[3][2] = z;
+    }
+
+    void projection(const float fFovDegrees, const float fAspectRatio, const float fNear,
+                    const float fFar)
+    {
+        float fFovRad = 1.0f / tan(fFovDegrees * 0.5f / 180.0f * 3.14159f);
+        this->m[0][0] = fAspectRatio * fFovRad;
+        this->m[1][1] = fFovRad;
+        this->m[2][2] = fFar / (fFar - fNear);
+        this->m[3][2] = (-fFar * fNear) / (fFar - fNear);
+        this->m[2][3] = 1.0f;
+        this->m[3][3] = 0.0f;
+    }
+
+    mat4 operator*=(const mat4 &other)
+    {
+        mat4 matrix;
+        for (int c = 0; c < 4; c++)
+            for (int r = 0; r < 4; r++)
+                matrix.m[r][c] =
+                    this->m[r][0] * other.m[0][c] + this->m[r][1] * other.m[1][c] +
+                    this->m[r][2] * other.m[2][c] + this->m[r][3] * other.m[3][c];
+        return matrix;
+    }
 };
+
+mat4 operator*(const mat4 &lhs, const mat4 &rhs)
+{
+    mat4 matrix;
+    for (int c = 0; c < 4; c++)
+        for (int r = 0; r < 4; r++)
+            matrix.m[r][c] = lhs.m[r][0] * rhs.m[0][c] + lhs.m[r][1] * rhs.m[1][c] +
+                             lhs.m[r][2] * rhs.m[2][c] + lhs.m[r][3] * rhs.m[3][c];
+    return matrix;
+}
+
+struct vec3d
+{
+    float x, y, z, w;
+
+    vec3d() : x(0.0f), y(0.0f), z(0.0f), w(1.0f) {}
+
+    vec3d(const float x, const float y, const float z) : x(x), y(y), z(z), w(1.0f) {}
+
+    vec3d &operator+=(const vec3d &other)
+    {
+        this->x += other.x;
+        this->y += other.y;
+        this->z += other.z;
+        return *this;
+    }
+
+    vec3d &operator-=(const vec3d &other)
+    {
+        this->x -= other.x;
+        this->y -= other.y;
+        this->z -= other.z;
+        return *this;
+    }
+
+    vec3d &operator*=(const vec3d &other)
+    {
+        this->x *= other.x;
+        this->y *= other.y;
+        this->z *= other.z;
+        return *this;
+    }
+
+    vec3d &operator*=(float k)
+    {
+        this->x *= k;
+        this->y *= k;
+        this->z *= k;
+        return *this;
+    }
+
+    vec3d &operator/=(const vec3d &other)
+    {
+        this->x /= other.x;
+        this->y /= other.y;
+        this->z /= other.z;
+        return *this;
+    }
+
+    vec3d &operator/=(float k)
+    {
+        this->x /= k;
+        this->y /= k;
+        this->z /= k;
+        return *this;
+    }
+
+    float dot_product(const vec3d &other)
+    {
+        return this->x * other.x + this->y * other.y + this->z * other.z;
+    }
+
+    float length() { return sqrt(this->dot_product(*this)); }
+
+    void normalize() { *this /= this->length(); }
+
+    vec3d cross_product(const vec3d &other)
+    {
+        return {
+            (this->y * other.z - this->z * other.y),
+            (this->z * other.x - this->x * other.z),
+            (this->x * other.y - this->y * other.x),
+        };
+    }
+
+    vec3d operator*=(const mat4 &m)
+    {
+        vec3d v;
+        v.x = this->x * m.m[0][0] + this->y * m.m[1][0] + this->z * m.m[2][0] +
+              this->w * m.m[3][0];
+        v.y = this->x * m.m[0][1] + this->y * m.m[1][1] + this->z * m.m[2][1] +
+              this->w * m.m[3][1];
+        v.z = this->x * m.m[0][2] + this->y * m.m[1][2] + this->z * m.m[2][2] +
+              this->w * m.m[3][2];
+        v.w = this->x * m.m[0][3] + this->y * m.m[1][3] + this->z * m.m[2][3] +
+              this->w * m.m[3][3];
+        return v;
+    }
+};
+
+vec3d operator*(const vec3d &lhs, const mat4 &rhs)
+{
+    vec3d v;
+    v.x = lhs.x * rhs.m[0][0] + lhs.y * rhs.m[1][0] + lhs.z * rhs.m[2][0] +
+          lhs.w * rhs.m[3][0];
+    v.y = lhs.x * rhs.m[0][1] + lhs.y * rhs.m[1][1] + lhs.z * rhs.m[2][1] +
+          lhs.w * rhs.m[3][1];
+    v.z = lhs.x * rhs.m[0][2] + lhs.y * rhs.m[1][2] + lhs.z * rhs.m[2][2] +
+          lhs.w * rhs.m[3][2];
+    v.w = lhs.x * rhs.m[0][3] + lhs.y * rhs.m[1][3] + lhs.z * rhs.m[2][3] +
+          lhs.w * rhs.m[3][3];
+    return v;
+}
+
+vec3d operator-(vec3d lhs, const vec3d &rhs)
+{
+    lhs.x -= rhs.x;
+    lhs.y -= rhs.y;
+    lhs.z -= rhs.z;
+    return lhs;
+}
 
 struct triangle
 {
     vec3d p[3];
     uint16_t col;
+
+    triangle() : p{vec3d(), vec3d(), vec3d()}, col(0) {}
+
+    triangle(const vec3d &p1, const vec3d &p2, const vec3d &p3) : p{p1, p2, p3}, col(0) {}
+
+    triangle &operator+=(const triangle &other)
+    {
+        this->p[0] += other.p[0];
+        this->p[1] += other.p[1];
+        this->p[2] += other.p[2];
+        return *this;
+    }
+
+    triangle &operator-=(const triangle &other)
+    {
+        this->p[0] -= other.p[0];
+        this->p[1] -= other.p[1];
+        this->p[2] -= other.p[2];
+        return *this;
+    }
+
+    triangle &operator*=(const triangle &other)
+    {
+        this->p[0] *= other.p[0];
+        this->p[1] *= other.p[1];
+        this->p[2] *= other.p[2];
+        return *this;
+    }
+
+    triangle &operator/=(const triangle &other)
+    {
+        this->p[0] /= other.p[0];
+        this->p[1] /= other.p[1];
+        this->p[2] /= other.p[2];
+        return *this;
+    }
 };
 
 struct mesh
@@ -261,21 +490,6 @@ void listDir(const char *dirname, uint8_t levels)
     }
 }
 
-void multiplyMatrixVector(const vec3d &i, vec3d &o, const mat4 &m)
-{
-    o.x = i.x * m.m[0][0] + i.y * m.m[1][0] + i.z * m.m[2][0] + m.m[3][0];
-    o.y = i.x * m.m[0][1] + i.y * m.m[1][1] + i.z * m.m[2][1] + m.m[3][1];
-    o.z = i.x * m.m[0][2] + i.y * m.m[1][2] + i.z * m.m[2][2] + m.m[3][2];
-    float w = i.x * m.m[0][3] + i.y * m.m[1][3] + i.z * m.m[2][3] + m.m[3][3];
-
-    if (w != 0.0f)
-    {
-        o.x = o.x / w;
-        o.y = o.y / w;
-        o.z = o.z / w;
-    }
-}
-
 int compareTris(const void *t1Ptr, const void *t2Ptr)
 {
     const triangle *t1 = reinterpret_cast<const triangle *>(t1Ptr);
@@ -287,9 +501,9 @@ int compareTris(const void *t1Ptr, const void *t2Ptr)
 
 uint16_t getColor(float lum, color col)
 {
-    int r = max(lum, 0.50f) * col.r;
-    int g = max(lum, 0.50f) * col.g;
-    int b = max(lum, 0.50f) * col.b;
+    int r = max(lum, 0.2f) * col.r;
+    int g = max(lum, 0.2f) * col.g;
+    int b = max(lum, 0.2f) * col.b;
     return ((r << 11) | (g << 5) | b);
 }
 
@@ -302,16 +516,16 @@ class ESPCon
     triangle *trisToRaster;
     uint32_t numTrisToRaster = 0;
 
-    mat4 matProj;
+    mat4 matProj{};
 
-    vec3d vCamera = {0.0f};
+    vec3d vCamera{};
 
     uint32_t deltaTime;
     uint32_t elapsedTime;
     uint32_t lastTime;
     float theta;
 
-    color col;
+    color col{};
 
 public:
     ESPCon() {}
@@ -344,18 +558,9 @@ public:
 
         elapsedTime = millis();
 
-        constexpr float fNear = 0.1f;
-        constexpr float fFar = 1000.0f;
-        constexpr float fFov = 90.0f;
-        constexpr float fAspectRatio = static_cast<float>(height) / width;
-        constexpr float fFovRad = 1.0f / tan(fFov * 0.5f / 180.0f * M_PI);
-
-        matProj.m[0][0] = fAspectRatio * fFovRad;
-        matProj.m[1][1] = fFovRad;
-        matProj.m[2][2] = fFar / (fFar - fNear);
-        matProj.m[3][2] = (-fFar * fNear) / (fFar - fNear);
-        matProj.m[2][3] = 1.0f;
-        matProj.m[3][3] = 0.0f;
+        matProj.projection(90.0f,
+                           aspectRatio,
+                           0.1f, 1000.0f);
 
         mMesh = loadObj("/littlefs/ship.obj");
         trisToRaster = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
@@ -377,23 +582,15 @@ public:
         col.g = sin(theta * 0.7f) * 63;
         col.b = sin(theta * 1.3f) * 31;
 
-        mat4 matRotZ, matRotX;
+        mat4 matRotZ{}, matRotX{}, matTrans{};
 
-        // Rotation Z
-        matRotZ.m[0][0] = cos(theta);
-        matRotZ.m[0][1] = sin(theta);
-        matRotZ.m[1][0] = -sin(theta);
-        matRotZ.m[1][1] = cos(theta);
-        matRotZ.m[2][2] = 1;
-        matRotZ.m[3][3] = 1;
+        matRotZ.rotation_z(theta * 0.5f);
+        matRotX.rotation_x(theta);
+        matTrans.translation(0.0f, 0.0f, 16.0f);
 
-        // Rotation X
-        matRotX.m[0][0] = 1;
-        matRotX.m[1][1] = cos(theta * 0.5f);
-        matRotX.m[1][2] = sin(theta * 0.5f);
-        matRotX.m[2][1] = -sin(theta * 0.5f);
-        matRotX.m[2][2] = cos(theta * 0.5f);
-        matRotX.m[3][3] = 1;
+        mat4 matWorld{};
+        matWorld = matRotZ * matRotX;
+        matWorld = matWorld * matTrans;
 
         memset(trisToRaster, 0, sizeof(triangle) * mMesh->numTris);
         numTrisToRaster = 0;
@@ -401,74 +598,50 @@ public:
         // Draw triangles
         for (uint32_t i = 0; i < mMesh->numTris; i++)
         {
-            triangle triProjected, triTranslated, triRotatedZ, triRotatedZX;
+            triangle triProjected{}, triTransformed{};
 
-            // Rotate Z
-            multiplyMatrixVector(mMesh->tris[i].p[0], triRotatedZ.p[0], matRotZ);
-            multiplyMatrixVector(mMesh->tris[i].p[1], triRotatedZ.p[1], matRotZ);
-            multiplyMatrixVector(mMesh->tris[i].p[2], triRotatedZ.p[2], matRotZ);
-
-            // Rotate X
-            multiplyMatrixVector(triRotatedZ.p[0], triRotatedZX.p[0], matRotX);
-            multiplyMatrixVector(triRotatedZ.p[1], triRotatedZX.p[1], matRotX);
-            multiplyMatrixVector(triRotatedZ.p[2], triRotatedZX.p[2], matRotX);
-
-            // Translate triangles
-            triTranslated = triRotatedZX;
-            triTranslated.p[0].z = triTranslated.p[0].z + 8.0f;
-            triTranslated.p[1].z = triTranslated.p[1].z + 8.0f;
-            triTranslated.p[2].z = triTranslated.p[2].z + 8.0f;
+            triTransformed.p[0] = mMesh->tris[i].p[0] * matWorld;
+            triTransformed.p[1] = mMesh->tris[i].p[1] * matWorld;
+            triTransformed.p[2] = mMesh->tris[i].p[2] * matWorld;
 
             // Check if side is visible
-            vec3d normal, line1, line2;
+            vec3d normal{}, line1{}, line2{};
 
-            line1.x = triTranslated.p[1].x - triTranslated.p[0].x;
-            line1.y = triTranslated.p[1].y - triTranslated.p[0].y;
-            line1.z = triTranslated.p[1].z - triTranslated.p[0].z;
+            // Get either side of triangle
+            line1 = triTransformed.p[1] - triTransformed.p[0];
+            line2 = triTransformed.p[2] - triTransformed.p[0];
 
-            line2.x = triTranslated.p[2].x - triTranslated.p[0].x;
-            line2.y = triTranslated.p[2].y - triTranslated.p[0].y;
-            line2.z = triTranslated.p[2].z - triTranslated.p[0].z;
+            // Take cross product to get normal
+            normal = line1.cross_product(line2);
+            normal.normalize();
 
-            normal.x = line1.y * line2.z - line1.z * line2.y;
-            normal.y = line1.z * line2.x - line1.x * line2.z;
-            normal.z = line1.x * line2.y - line1.y * line2.x;
+            // Get ray from triangle to camera
+            vec3d vCameraRay = triTransformed.p[0] - vCamera;
 
-            float l = sqrt(pow(normal.x, 2) + pow(normal.y, 2) + pow(normal.z, 2));
-            normal.x /= l;
-            normal.y /= l;
-            normal.z /= l;
-
-            if ((normal.x * (triTranslated.p[0].x - vCamera.x) +
-                 normal.y * (triTranslated.p[0].y - vCamera.y) +
-                 normal.z * (triTranslated.p[0].z - vCamera.z)) < 0.0f)
+            if (normal.dot_product(vCameraRay) < 0.0f)
             {
-                // Add basic lighting
+                // Set and normalize light direction
                 vec3d light_direction = {0.0f, 0.0f, -1.0f};
+                light_direction.normalize();
 
-                float l = sqrt(pow(light_direction.x, 2) + pow(light_direction.y, 2) +
-                               pow(light_direction.z, 2));
-                light_direction.x /= l;
-                light_direction.y /= l;
-                light_direction.z /= l;
+                // How alligned is triangle surface normal and light direction
+                uint16_t c = getColor(light_direction.dot_product(normal), col);
 
-                float dp = normal.x * light_direction.x + normal.y * light_direction.y +
-                           normal.z * light_direction.z;
-
-                uint16_t c = getColor(dp, col);
                 triProjected.col = c;
 
-                multiplyMatrixVector(triTranslated.p[0], triProjected.p[0], matProj);
-                multiplyMatrixVector(triTranslated.p[1], triProjected.p[1], matProj);
-                multiplyMatrixVector(triTranslated.p[2], triProjected.p[2], matProj);
+                triProjected.p[0] = triTransformed.p[0] * matProj;
+                triProjected.p[1] = triTransformed.p[1] * matProj;
+                triProjected.p[2] = triTransformed.p[2] * matProj;
+
+                triProjected.p[0] /= triProjected.p[0].w;
+                triProjected.p[1] /= triProjected.p[1].w;
+                triProjected.p[2] /= triProjected.p[2].w;
 
                 // Scale into view
-                triProjected.p[0].x += 1.0f;
-                triProjected.p[0].y += 1.0f;
-                triProjected.p[1].x += 1.0f;
-                triProjected.p[1].y += 1.0f;
-                triProjected.p[2].x += 1.0f;
-                triProjected.p[2].y += 1.0f;
+                vec3d vOffsetView = {1.0f, 1.0f, 0.0f};
+                triProjected.p[0] += vOffsetView;
+                triProjected.p[1] += vOffsetView;
+                triProjected.p[2] += vOffsetView;
 
                 triProjected.p[0].x *= 0.5f * static_cast<float>(width);
                 triProjected.p[1].x *= 0.5f * static_cast<float>(width);

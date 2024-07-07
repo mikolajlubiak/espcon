@@ -145,7 +145,8 @@ mesh *loadObj(const char *path)
     vec3d *verts = reinterpret_cast<vec3d *>(calloc(numAllocVerts, sizeof(vec3d)));
     uint32_t numFilledVerts = 0;
 
-    char *line = reinterpret_cast<char *>(calloc(numLoadChars, sizeof(char)));
+    uint32_t numAllocChars = numLoadChars;
+    char *line = reinterpret_cast<char *>(calloc(numAllocChars, sizeof(char)));
     uint32_t numFilledChars = 0;
     bool isNewLine = true;
 
@@ -189,10 +190,21 @@ mesh *loadObj(const char *path)
             isNewLine = false;
             line[numFilledChars] = c;
             numFilledChars++;
+            if (numFilledChars > numAllocChars)
+            {
+                numAllocChars = numAllocChars * 2;
+                line = reinterpret_cast<char *>(realloc(line, numAllocChars * sizeof(char)));
+            }
         }
     }
 
     file.close();
+
+    free(verts);
+    verts = nullptr;
+
+    free(line);
+    line = nullptr;
 
     return mMesh;
 }

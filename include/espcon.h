@@ -180,7 +180,7 @@ mesh *loadObj(const char *path)
                         mMesh->tris = reinterpret_cast<triangle *>(realloc(mMesh->tris, mMesh->numTris * sizeof(triangle)));
                     }
                 }
-                memset(line, 0, numLoadChars * sizeof(char));
+                memset(line, 0, numAllocChars * sizeof(char));
                 numFilledChars = 0;
             }
             isNewLine = true;

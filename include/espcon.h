@@ -344,11 +344,11 @@ public:
 
         elapsedTime = millis();
 
-        float fNear = 0.1f;
-        float fFar = 1000.0f;
-        float fFov = 90.0f;
-        float fAspectRatio = static_cast<float>(height) / width;
-        float fFovRad = 1.0f / tan(fFov * 0.5f / 180.0f * 3.141592f);
+        constexpr float fNear = 0.1f;
+        constexpr float fFar = 1000.0f;
+        constexpr float fFov = 90.0f;
+        constexpr float fAspectRatio = static_cast<float>(height) / width;
+        constexpr float fFovRad = 1.0f / tan(fFov * 0.5f / 180.0f * M_PI);
 
         matProj.m[0][0] = fAspectRatio * fFovRad;
         matProj.m[1][1] = fFovRad;

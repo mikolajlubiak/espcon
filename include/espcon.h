@@ -592,8 +592,8 @@ public:
         matTrans.translation(0.0f, 0.0f, 16.0f);
 
         mat4 matWorld{};
-        matWorld = matRotZ * matRotX;
-        matWorld = matWorld * matTrans;
+        matWorld.identity();
+        matWorld = matTrans * matRotZ * matRotX;
 
         // memset(trisToRaster, 0, sizeof(triangle) * mMesh->numTris);
         free(trisToRaster);

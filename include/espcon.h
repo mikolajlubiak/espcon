@@ -24,8 +24,16 @@ struct color
     color() : r(0), g(0), b(0) {}
     color(const uint8_t r, const uint8_t g, const uint8_t b) : r(r), g(g), b(b) {}
 
-    uint16_t load()
+    uint16_t load() const
     {
+        return ((this->r << 11) | (this->g << 5) | this->b);
+    }
+
+    uint16_t getColor(const float lum) const
+    {
+        uint8_t r = max(lum, 0.2f) * this->r;
+        uint8_t g = max(lum, 0.2f) * this->g;
+        uint8_t b = max(lum, 0.2f) * this->b;
         return ((r << 11) | (g << 5) | b);
     }
 };
@@ -86,7 +94,7 @@ struct mat4
     void projection(const float fFovDegrees, const float fAspectRatio, const float fNear,
                     const float fFar)
     {
-        float fFovRad = 1.0f / tan(fFovDegrees * 0.5f / 180.0f * 3.14159f);
+        float fFovRad = 1.0f / tan(fFovDegrees * 0.5f / 180.0f * M_PI);
         this->m[0][0] = fAspectRatio * fFovRad;
         this->m[1][1] = fFovRad;
         this->m[2][2] = fFar / (fFar - fNear);
@@ -95,11 +103,11 @@ struct mat4
         this->m[3][3] = 0.0f;
     }
 
-    mat4 operator*=(const mat4 &other)
+    mat4 operator*=(const mat4 &other) const
     {
         mat4 matrix;
-        for (int c = 0; c < 4; c++)
-            for (int r = 0; r < 4; r++)
+        for (uint8_t c = 0; c < 4; c++)
+            for (uint8_t r = 0; r < 4; r++)
                 matrix.m[r][c] =
                     this->m[r][0] * other.m[0][c] + this->m[r][1] * other.m[1][c] +
                     this->m[r][2] * other.m[2][c] + this->m[r][3] * other.m[3][c];
@@ -110,8 +118,8 @@ struct mat4
 mat4 operator*(const mat4 &lhs, const mat4 &rhs)
 {
     mat4 matrix;
-    for (int c = 0; c < 4; c++)
-        for (int r = 0; r < 4; r++)
+    for (uint8_t c = 0; c < 4; c++)
+        for (uint8_t r = 0; r < 4; r++)
             matrix.m[r][c] = lhs.m[r][0] * rhs.m[0][c] + lhs.m[r][1] * rhs.m[1][c] +
                              lhs.m[r][2] * rhs.m[2][c] + lhs.m[r][3] * rhs.m[3][c];
     return matrix;
@@ -119,11 +127,14 @@ mat4 operator*(const mat4 &lhs, const mat4 &rhs)
 
 struct vec3d
 {
-    float x, y, z, w;
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    float w = 1.0f;
 
-    vec3d() : x(0.0f), y(0.0f), z(0.0f), w(1.0f) {}
+    vec3d() {}
 
-    vec3d(const float x, const float y, const float z) : x(x), y(y), z(z), w(1.0f) {}
+    vec3d(const float x, const float y, const float z) : x(x), y(y), z(z) {}
 
     vec3d &operator+=(const vec3d &other)
     {
@@ -149,7 +160,7 @@ struct vec3d
         return *this;
     }
 
-    vec3d &operator*=(float k)
+    vec3d &operator*=(const float k)
     {
         this->x *= k;
         this->y *= k;
@@ -165,7 +176,7 @@ struct vec3d
         return *this;
     }
 
-    vec3d &operator/=(float k)
+    vec3d &operator/=(const float k)
     {
         this->x /= k;
         this->y /= k;
@@ -173,16 +184,16 @@ struct vec3d
         return *this;
     }
 
-    float dot_product(const vec3d &other)
+    float dot_product(const vec3d &other) const
     {
         return this->x * other.x + this->y * other.y + this->z * other.z;
     }
 
-    float length() { return sqrt(this->dot_product(*this)); }
+    float length() const { return sqrt(this->dot_product(*this)); }
 
     void normalize() { *this /= this->length(); }
 
-    vec3d cross_product(const vec3d &other)
+    vec3d cross_product(const vec3d &other) const
     {
         return {
             (this->y * other.z - this->z * other.y),
@@ -191,7 +202,7 @@ struct vec3d
         };
     }
 
-    vec3d operator*=(const mat4 &m)
+    vec3d operator*=(const mat4 &m) const
     {
         vec3d v;
         v.x = this->x * m.m[0][0] + this->y * m.m[1][0] + this->z * m.m[2][0] +
@@ -231,11 +242,11 @@ vec3d operator-(vec3d lhs, const vec3d &rhs)
 struct triangle
 {
     vec3d p[3];
-    uint16_t col;
+    uint16_t col = 0;
 
-    triangle() : p{vec3d(), vec3d(), vec3d()}, col(0) {}
+    triangle() {}
 
-    triangle(const vec3d &p1, const vec3d &p2, const vec3d &p3) : p{p1, p2, p3}, col(0) {}
+    triangle(const vec3d &p1, const vec3d &p2, const vec3d &p3) : p{p1, p2, p3} {}
 
     triangle &operator+=(const triangle &other)
     {
@@ -499,21 +510,13 @@ int compareTris(const void *t1Ptr, const void *t2Ptr)
     return z1 > z2;
 }
 
-uint16_t getColor(float lum, color col)
-{
-    int r = max(lum, 0.2f) * col.r;
-    int g = max(lum, 0.2f) * col.g;
-    int b = max(lum, 0.2f) * col.b;
-    return ((r << 11) | (g << 5) | b);
-}
-
 class ESPCon
 {
     Adafruit_ST7735 tft = Adafruit_ST7735(tftCS, tftDC, tftRST);
 
-    mesh *mMesh;
+    mesh *mMesh = nullptr;
 
-    triangle *trisToRaster;
+    triangle *trisToRaster = nullptr;
     uint32_t numTrisToRaster = 0;
 
     mat4 matProj{};
@@ -523,7 +526,7 @@ class ESPCon
     uint32_t deltaTime;
     uint32_t elapsedTime;
     uint32_t lastTime;
-    float theta;
+    float theta = 0.0f;
 
     color col{};
 
@@ -592,7 +595,8 @@ public:
         matWorld = matRotZ * matRotX;
         matWorld = matWorld * matTrans;
 
-        memset(trisToRaster, 0, sizeof(triangle) * mMesh->numTris);
+        free(trisToRaster);
+        trisToRaster = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
         numTrisToRaster = 0;
 
         // Draw triangles
@@ -625,7 +629,7 @@ public:
                 light_direction.normalize();
 
                 // How alligned is triangle surface normal and light direction
-                uint16_t c = getColor(light_direction.dot_product(normal), col);
+                uint16_t c = col.getColor(light_direction.dot_product(normal));
 
                 triProjected.col = c;
 

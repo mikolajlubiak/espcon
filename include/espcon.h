@@ -595,6 +595,7 @@ public:
         matWorld = matRotZ * matRotX;
         matWorld = matWorld * matTrans;
 
+        // memset(trisToRaster, 0, sizeof(triangle) * mMesh->numTris);
         free(trisToRaster);
         trisToRaster = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
         numTrisToRaster = 0;

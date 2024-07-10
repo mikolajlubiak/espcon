@@ -31,10 +31,10 @@ struct color
 
     uint16_t getColor(const float lum) const
     {
-        uint8_t r = max(lum, 0.2f) * this->r;
-        uint8_t g = max(lum, 0.2f) * this->g;
-        uint8_t b = max(lum, 0.2f) * this->b;
-        return ((r << 11) | (g << 5) | b);
+        uint8_t _r = max(lum, 0.2f) * this->r;
+        uint8_t _g = max(lum, 0.2f) * this->g;
+        uint8_t _b = max(lum, 0.2f) * this->b;
+        return ((_r << 11) | (_g << 5) | _b);
     }
 };
 

@@ -60,17 +60,35 @@ struct mesh
 mesh *allocMesh(uint32_t numTris)
 {
     mesh *mMesh = reinterpret_cast<mesh *>(calloc(1, sizeof(mesh)));
+    if (mMesh == nullptr)
+    {
+        Serial.println("Error in allocMesh, mMesh == nullptr");
+        return nullptr;
+    }
+
     mMesh->tris = reinterpret_cast<triangle *>(calloc(numTris, sizeof(triangle)));
+    if (mMesh->tris == nullptr)
+    {
+        Serial.println("Error in allocMesh, mMesh->tris == nullptr");
+        return nullptr;
+    }
+
     mMesh->numTris = numTris;
     return mMesh;
 }
 
 void freeMesh(mesh *mMesh)
 {
-    free(mMesh->tris);
-    mMesh->tris = nullptr;
+    if (mMesh != nullptr)
+    {
+        if (mMesh->tris != nullptr)
+        {
+            free(mMesh->tris);
+            mMesh->tris = nullptr;
+        }
 
-    free(mMesh);
+        free(mMesh);
+    }
 }
 
 mesh *initMeshCube()
@@ -80,12 +98,14 @@ mesh *initMeshCube()
     mesh *mMesh = reinterpret_cast<mesh *>(calloc(1, sizeof(mesh)));
     if (mMesh == nullptr)
     {
+        Serial.println("Error in initMeshCube, mMesh == nullptr");
         return nullptr;
     }
 
     mMesh->tris = reinterpret_cast<triangle *>(calloc(numTris, sizeof(triangle)));
     if (mMesh->tris == nullptr)
     {
+        Serial.println("Error in initMeshCube, mMesh->tris == nullptr");
         return nullptr;
     }
 
@@ -141,6 +161,11 @@ mesh *loadObj(const char *path)
     constexpr uint32_t numLoadChars = 128;
 
     mesh *mMesh = reinterpret_cast<mesh *>(calloc(1, sizeof(mesh)));
+    if (mMesh == nullptr)
+    {
+        Serial.println("Error in loadObj, mMesh == nullptr");
+        return nullptr;
+    }
 
     File file = LittleFS.open(path);
     if (!file)
@@ -151,14 +176,32 @@ mesh *loadObj(const char *path)
 
     mMesh->numTris = numLoadTris;
     mMesh->tris = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
+    if (mMesh->tris == nullptr)
+    {
+        Serial.println("Error in loadObj, mMesh->tris == nullptr");
+        return nullptr;
+    }
+
     uint32_t numFilledTris = 0;
 
     uint32_t numAllocVerts = numLoadVerts;
     vec3d *verts = reinterpret_cast<vec3d *>(calloc(numAllocVerts, sizeof(vec3d)));
+    if (verts == nullptr)
+    {
+        Serial.println("Error in loadObj, verts == nullptr");
+        return nullptr;
+    }
+
     uint32_t numFilledVerts = 0;
 
     uint32_t numAllocChars = numLoadChars;
     char *line = reinterpret_cast<char *>(calloc(numAllocChars, sizeof(char)));
+    if (line == nullptr)
+    {
+        Serial.println("Error in loadObj, line == nullptr");
+        return nullptr;
+    }
+
     uint32_t numFilledChars = 0;
     bool isNewLine = true;
 
@@ -180,6 +223,7 @@ mesh *loadObj(const char *path)
                         verts = reinterpret_cast<vec3d *>(realloc(verts, numAllocVerts * sizeof(vec3d)));
                         if (verts == nullptr)
                         {
+                            Serial.println("Error in loadObj, verts == nullptr after realloc");
                             return nullptr;
                         }
                     }
@@ -196,6 +240,7 @@ mesh *loadObj(const char *path)
                         mMesh->tris = reinterpret_cast<triangle *>(realloc(mMesh->tris, mMesh->numTris * sizeof(triangle)));
                         if (mMesh->tris == nullptr)
                         {
+                            Serial.println("Error in loadObj, mMesh->tris == nullptr after realloc");
                             return nullptr;
                         }
                     }
@@ -216,6 +261,7 @@ mesh *loadObj(const char *path)
                 line = reinterpret_cast<char *>(realloc(line, numAllocChars * sizeof(char)));
                 if (line == nullptr)
                 {
+                    Serial.println("Error in loadObj, line == nullptr after realloc");
                     return nullptr;
                 }
             }

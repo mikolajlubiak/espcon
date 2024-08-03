@@ -12,26 +12,26 @@ constexpr uint8_t tftCS = 10;
 constexpr uint8_t tftDC = 9;
 constexpr uint8_t tftRST = 8;
 
-#ifdef BUILD_ST7735
-constexpr uint16_t height = 128;
-constexpr uint16_t width = 128;
-#elif BUILD_ILI9341
-constexpr uint16_t height = 320;
-constexpr uint16_t width = 240;
-#endif
-
 constexpr uint16_t fps = 60;
 constexpr float frame_delay = static_cast<float>(fps) / 1000;
 
 struct color
 {
-    unsigned char r : 5;
-    unsigned char g : 6;
-    unsigned char b : 5;
+    uint8_t r : 5;
+    uint8_t g : 6;
+    uint8_t b : 5;
 
     uint16_t load()
     {
         return ((r << 11) | (g << 5) | b);
+    }
+
+    uint16_t getColor(float lum)
+    {
+        uint8_t _r = max(lum, 0.2f) * this->r;
+        uint8_t _g = max(lum, 0.2f) * this->g;
+        uint8_t _b = max(lum, 0.2f) * this->b;
+        return ((_r << 11) | (_g << 5) | _b);
     }
 };
 
@@ -309,14 +309,6 @@ int compareTris(const void *t1Ptr, const void *t2Ptr)
     return z1 > z2;
 }
 
-uint16_t getColor(float lum, color col)
-{
-    int r = max(lum, 0.50f) * col.r;
-    int g = max(lum, 0.50f) * col.g;
-    int b = max(lum, 0.50f) * col.b;
-    return ((r << 11) | (g << 5) | b);
-}
-
 class ESPCon
 {
 #ifdef BUILD_ST7735
@@ -325,21 +317,24 @@ class ESPCon
     Adafruit_ILI9341 tft = Adafruit_ILI9341(tftCS, tftDC);
 #endif
 
-    mesh *mMesh;
+    const uint16_t height = tft.height();
+    const uint16_t width = tft.width();
 
-    triangle *trisToRaster;
+    mesh *mMesh = nullptr;
+
+    triangle *trisToRaster = nullptr;
     uint32_t numTrisToRaster = 0;
 
-    mat4 matProj;
+    mat4 matProj{};
 
-    vec3d vCamera = {0.0f};
+    vec3d vCamera{};
 
     uint32_t deltaTime;
     uint32_t elapsedTime;
     uint32_t lastTime;
-    float theta;
+    float theta = 0.0f;
 
-    color col;
+    color col{};
 
 public:
     ESPCon() {}
@@ -377,7 +372,7 @@ public:
         constexpr float fNear = 0.1f;
         constexpr float fFar = 1000.0f;
         constexpr float fFov = 90.0f;
-        constexpr float fAspectRatio = static_cast<float>(height) / width;
+        const float fAspectRatio = static_cast<float>(height) / width;
         const float fFovRad = 1.0f / tan(fFov * 0.5f / 180.0f * M_PI);
 
         matProj.m[0][0] = fAspectRatio * fFovRad;
@@ -407,7 +402,7 @@ public:
     void loop()
     {
 #ifdef BUILD_ST7735
-        tft.fillScreen(ST77XX_BLACK);
+        tft.fillScreen(ST7735_BLACK);
 #elif BUILD_ILI9341
         tft.fillScreen(ILI9341_BLACK);
         yield();
@@ -501,7 +496,7 @@ public:
                 float dp = normal.x * light_direction.x + normal.y * light_direction.y +
                            normal.z * light_direction.z;
 
-                uint16_t c = getColor(dp, col);
+                uint16_t c = col.getColor(dp);
                 triProjected.col = c;
 
                 multiplyMatrixVector(triTranslated.p[0], triProjected.p[0], matProj);

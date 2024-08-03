@@ -317,8 +317,15 @@ class ESPCon
     Adafruit_ILI9341 tft = Adafruit_ILI9341(tftCS, tftDC);
 #endif
 
+#ifdef BUILD_ST7735
     const uint16_t height = tft.height();
     const uint16_t width = tft.width();
+#elif BUILD_ILI9341
+    // Thats not an error, thats actually hacky fix
+    // For some reason my ILI9341 display can only draw on 1:1 aspect ratio surface (it clipps the rest)
+    const uint16_t height = tft.width();
+    const uint16_t width = tft.width();
+#endif
 
     mesh *mMesh = nullptr;
 
@@ -365,6 +372,9 @@ public:
         // Note that speed allowable depends on chip and quality of wiring, if you go too fast, you
         // may end up with a black screen some times, or all the time.
         tft.setSPISpeed(79999999); // max tested on ESP32-S3 (80000000 produces artifacts)
+#elif BUILD_ILI9341
+        tft.begin();
+        tft.setRotation(3);
 #endif
 
         elapsedTime = millis();
@@ -530,7 +540,7 @@ public:
             tft.fillTriangle(trisToRaster[i].p[0].x, trisToRaster[i].p[0].y, trisToRaster[i].p[1].x, trisToRaster[i].p[1].y, trisToRaster[i].p[2].x, trisToRaster[i].p[2].y, trisToRaster[i].col);
         }
 
-#if BUILD_ILI9341
+#ifdef BUILD_ILI9341
         yield();
 #endif
 

@@ -1,23 +1,21 @@
-#include <Adafruit_GFX.h>
-#include <Adafruit_ST7735.h>
 #include <SPI.h>
 #include <LittleFS.h>
 
-constexpr uint8_t tftCS = 10;
-constexpr uint8_t tftRST = 9;
-constexpr uint8_t tftDC = 8;
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7735.h>
 
-constexpr uint16_t height = 128;
-constexpr uint16_t width = 128;
+constexpr uint8_t tftCS = 10;
+constexpr uint8_t tftDC = 9;
+constexpr uint8_t tftRST = 8;
 
 constexpr uint16_t fps = 60;
 constexpr float frame_delay = static_cast<float>(fps) / 1000;
 
 struct color
 {
-    unsigned char r : 5;
-    unsigned char g : 6;
-    unsigned char b : 5;
+    uint8_t r : 5;
+    uint8_t g : 6;
+    uint8_t b : 5;
 
     uint16_t load()
     {
@@ -57,18 +55,10 @@ mesh *allocMesh(uint32_t numTris)
 
 void freeMesh(mesh *mMesh)
 {
-    // Check if the triangle array pointer is not NULL before freeing it
-    if (mMesh && mMesh->tris)
-    {
-        free(mMesh->tris);
-        mMesh->tris = nullptr;
-    }
+    free(mMesh->tris);
+    mMesh->tris = nullptr;
 
-    // Check if the mesh pointer itself is not NULL before freeing it
-    if (mMesh)
-    {
-        free(mMesh);
-    }
+    free(mMesh);
 }
 
 mesh *initMeshCube()
@@ -76,7 +66,17 @@ mesh *initMeshCube()
     constexpr uint32_t numTris = 12;
 
     mesh *mMesh = reinterpret_cast<mesh *>(calloc(1, sizeof(mesh)));
+    if (mMesh == nullptr)
+    {
+        return nullptr;
+    }
+
     mMesh->tris = reinterpret_cast<triangle *>(calloc(numTris, sizeof(triangle)));
+    if (mMesh->tris == nullptr)
+    {
+        return nullptr;
+    }
+
     mMesh->numTris = numTris;
 
     // Cube vertices
@@ -166,6 +166,10 @@ mesh *loadObj(const char *path)
                     {
                         numAllocVerts = numAllocVerts * 2;
                         verts = reinterpret_cast<vec3d *>(realloc(verts, numAllocVerts * sizeof(vec3d)));
+                        if (verts == nullptr)
+                        {
+                            return nullptr;
+                        }
                     }
                 }
                 else if (line[0] == 'f')
@@ -178,6 +182,10 @@ mesh *loadObj(const char *path)
                     {
                         mMesh->numTris = mMesh->numTris * 2;
                         mMesh->tris = reinterpret_cast<triangle *>(realloc(mMesh->tris, mMesh->numTris * sizeof(triangle)));
+                        if (mMesh->tris == nullptr)
+                        {
+                            return nullptr;
+                        }
                     }
                 }
                 memset(line, 0, numAllocChars * sizeof(char));
@@ -194,6 +202,10 @@ mesh *loadObj(const char *path)
             {
                 numAllocChars = numAllocChars * 2;
                 line = reinterpret_cast<char *>(realloc(line, numAllocChars * sizeof(char)));
+                if (line == nullptr)
+                {
+                    return nullptr;
+                }
             }
         }
     }
@@ -297,6 +309,9 @@ class ESPCon
 {
     Adafruit_ST7735 tft = Adafruit_ST7735(tftCS, tftDC, tftRST);
 
+    const uint16_t height = tft.height();
+    const uint16_t width = tft.width();
+
     mesh *mMesh;
 
     triangle *trisToRaster;
@@ -347,8 +362,8 @@ public:
         constexpr float fNear = 0.1f;
         constexpr float fFar = 1000.0f;
         constexpr float fFov = 90.0f;
-        constexpr float fAspectRatio = static_cast<float>(height) / width;
-        constexpr float fFovRad = 1.0f / tan(fFov * 0.5f / 180.0f * M_PI);
+        const float fAspectRatio = static_cast<float>(height) / width;
+        const float fFovRad = 1.0f / tan(fFov * 0.5f / 180.0f * M_PI);
 
         matProj.m[0][0] = fAspectRatio * fFovRad;
         matProj.m[1][1] = fFovRad;
@@ -358,14 +373,25 @@ public:
         matProj.m[3][3] = 0.0f;
 
         mMesh = loadObj("/littlefs/ship.obj");
+        if (mMesh == nullptr)
+        {
+            Serial.println("Error occured while loading OBJ");
+            return 1;
+        }
+
         trisToRaster = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
+        if (trisToRaster == nullptr)
+        {
+            Serial.println("Error occured while reserving memory for trisToRaster");
+            return 1;
+        }
 
         return 0;
     }
 
     void loop()
     {
-        tft.fillScreen(ST77XX_BLACK);
+        tft.fillScreen(ST7735_BLACK);
 
         lastTime = elapsedTime;
         elapsedTime = millis();

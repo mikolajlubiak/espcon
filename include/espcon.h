@@ -1,14 +1,24 @@
-#include <Adafruit_GFX.h>
-#include <Adafruit_ST7735.h>
 #include <SPI.h>
 #include <LittleFS.h>
 
-constexpr uint8_t tftCS = 10;
-constexpr uint8_t tftRST = 9;
-constexpr uint8_t tftDC = 8;
+#include <Adafruit_GFX.h>
+#ifdef BUILD_ST7735
+#include <Adafruit_ST7735.h>
+#elif BUILD_ILI9341
+#include <Adafruit_ILI9341.h>
+#endif
 
+constexpr uint8_t tftCS = 10;
+constexpr uint8_t tftDC = 9;
+constexpr uint8_t tftRST = 8;
+
+#ifdef BUILD_ST7735
 constexpr uint16_t height = 128;
 constexpr uint16_t width = 128;
+#elif BUILD_ILI9341
+constexpr uint16_t height = 320;
+constexpr uint16_t width = 240;
+#endif
 
 constexpr uint16_t fps = 60;
 constexpr float frame_delay = static_cast<float>(fps) / 1000;
@@ -57,18 +67,10 @@ mesh *allocMesh(uint32_t numTris)
 
 void freeMesh(mesh *mMesh)
 {
-    // Check if the triangle array pointer is not NULL before freeing it
-    if (mMesh && mMesh->tris)
-    {
-        free(mMesh->tris);
-        mMesh->tris = nullptr;
-    }
+    free(mMesh->tris);
+    mMesh->tris = nullptr;
 
-    // Check if the mesh pointer itself is not NULL before freeing it
-    if (mMesh)
-    {
-        free(mMesh);
-    }
+    free(mMesh);
 }
 
 mesh *initMeshCube()
@@ -76,7 +78,17 @@ mesh *initMeshCube()
     constexpr uint32_t numTris = 12;
 
     mesh *mMesh = reinterpret_cast<mesh *>(calloc(1, sizeof(mesh)));
+    if (mMesh == nullptr)
+    {
+        return nullptr;
+    }
+
     mMesh->tris = reinterpret_cast<triangle *>(calloc(numTris, sizeof(triangle)));
+    if (mMesh->tris == nullptr)
+    {
+        return nullptr;
+    }
+
     mMesh->numTris = numTris;
 
     // Cube vertices
@@ -166,6 +178,10 @@ mesh *loadObj(const char *path)
                     {
                         numAllocVerts = numAllocVerts * 2;
                         verts = reinterpret_cast<vec3d *>(realloc(verts, numAllocVerts * sizeof(vec3d)));
+                        if (verts == nullptr)
+                        {
+                            return nullptr;
+                        }
                     }
                 }
                 else if (line[0] == 'f')
@@ -178,6 +194,10 @@ mesh *loadObj(const char *path)
                     {
                         mMesh->numTris = mMesh->numTris * 2;
                         mMesh->tris = reinterpret_cast<triangle *>(realloc(mMesh->tris, mMesh->numTris * sizeof(triangle)));
+                        if (mMesh->tris == nullptr)
+                        {
+                            return nullptr;
+                        }
                     }
                 }
                 memset(line, 0, numAllocChars * sizeof(char));
@@ -194,6 +214,10 @@ mesh *loadObj(const char *path)
             {
                 numAllocChars = numAllocChars * 2;
                 line = reinterpret_cast<char *>(realloc(line, numAllocChars * sizeof(char)));
+                if (line == nullptr)
+                {
+                    return nullptr;
+                }
             }
         }
     }
@@ -295,7 +319,11 @@ uint16_t getColor(float lum, color col)
 
 class ESPCon
 {
+#ifdef BUILD_ST7735
     Adafruit_ST7735 tft = Adafruit_ST7735(tftCS, tftDC, tftRST);
+#elif BUILD_ILI9341
+    Adafruit_ILI9341 tft = Adafruit_ILI9341(tftCS, tftDC);
+#endif
 
     mesh *mMesh;
 
@@ -335,12 +363,14 @@ public:
             return 1;
         }
 
+#ifdef BUILD_ST7735
         tft.initR(INITR_144GREENTAB);
 
         // SPI speed defaults to SPI_DEFAULT_FREQ defined in the library, you can override it here
         // Note that speed allowable depends on chip and quality of wiring, if you go too fast, you
         // may end up with a black screen some times, or all the time.
         tft.setSPISpeed(79999999); // max tested on ESP32-S3 (80000000 produces artifacts)
+#endif
 
         elapsedTime = millis();
 
@@ -348,7 +378,7 @@ public:
         constexpr float fFar = 1000.0f;
         constexpr float fFov = 90.0f;
         constexpr float fAspectRatio = static_cast<float>(height) / width;
-        constexpr float fFovRad = 1.0f / tan(fFov * 0.5f / 180.0f * M_PI);
+        const float fFovRad = 1.0f / tan(fFov * 0.5f / 180.0f * M_PI);
 
         matProj.m[0][0] = fAspectRatio * fFovRad;
         matProj.m[1][1] = fFovRad;
@@ -358,14 +388,30 @@ public:
         matProj.m[3][3] = 0.0f;
 
         mMesh = loadObj("/littlefs/ship.obj");
+        if (mMesh == nullptr)
+        {
+            Serial.println("Error occured while loading OBJ");
+            return 1;
+        }
+
         trisToRaster = reinterpret_cast<triangle *>(calloc(mMesh->numTris, sizeof(triangle)));
+        if (trisToRaster == nullptr)
+        {
+            Serial.println("Error occured while reserving memory for trisToRaster");
+            return 1;
+        }
 
         return 0;
     }
 
     void loop()
     {
+#ifdef BUILD_ST7735
         tft.fillScreen(ST77XX_BLACK);
+#elif BUILD_ILI9341
+        tft.fillScreen(ILI9341_BLACK);
+        yield();
+#endif
 
         lastTime = elapsedTime;
         elapsedTime = millis();
@@ -488,6 +534,10 @@ public:
         {
             tft.fillTriangle(trisToRaster[i].p[0].x, trisToRaster[i].p[0].y, trisToRaster[i].p[1].x, trisToRaster[i].p[1].y, trisToRaster[i].p[2].x, trisToRaster[i].p[2].y, trisToRaster[i].col);
         }
+
+#if BUILD_ILI9341
+        yield();
+#endif
 
         if (frame_delay > deltaTime)
         {

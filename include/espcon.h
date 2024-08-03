@@ -321,7 +321,7 @@ class ESPCon
     const uint16_t height = tft.height();
     const uint16_t width = tft.width();
 #elif BUILD_ILI9341
-    // Thats not an error, thats actually hacky fix
+    // Thats not a bug, thats actually a hacky fix
     // For some reason my ILI9341 display can only draw on 1:1 aspect ratio surface (it clipps the rest)
     const uint16_t height = tft.width();
     const uint16_t width = tft.width();

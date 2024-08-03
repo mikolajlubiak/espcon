@@ -21,6 +21,14 @@ struct color
     {
         return ((r << 11) | (g << 5) | b);
     }
+
+    uint16_t getColor(float lum)
+    {
+        uint8_t _r = max(lum, 0.2f) * this->r;
+        uint8_t _g = max(lum, 0.2f) * this->g;
+        uint8_t _b = max(lum, 0.2f) * this->b;
+        return ((_r << 11) | (_g << 5) | _b);
+    }
 };
 
 struct vec3d
@@ -297,14 +305,6 @@ int compareTris(const void *t1Ptr, const void *t2Ptr)
     return z1 > z2;
 }
 
-uint16_t getColor(float lum, color col)
-{
-    int r = max(lum, 0.50f) * col.r;
-    int g = max(lum, 0.50f) * col.g;
-    int b = max(lum, 0.50f) * col.b;
-    return ((r << 11) | (g << 5) | b);
-}
-
 class ESPCon
 {
     Adafruit_ST7735 tft = Adafruit_ST7735(tftCS, tftDC, tftRST);
@@ -312,21 +312,21 @@ class ESPCon
     const uint16_t height = tft.height();
     const uint16_t width = tft.width();
 
-    mesh *mMesh;
+    mesh *mMesh = nullptr;
 
-    triangle *trisToRaster;
+    triangle *trisToRaster = nullptr;
     uint32_t numTrisToRaster = 0;
 
-    mat4 matProj;
+    mat4 matProj{};
 
-    vec3d vCamera = {0.0f};
+    vec3d vCamera{};
 
     uint32_t deltaTime;
     uint32_t elapsedTime;
     uint32_t lastTime;
-    float theta;
+    float theta = 0.0f;
 
-    color col;
+    color col{};
 
 public:
     ESPCon() {}
@@ -481,7 +481,7 @@ public:
                 float dp = normal.x * light_direction.x + normal.y * light_direction.y +
                            normal.z * light_direction.z;
 
-                uint16_t c = getColor(dp, col);
+                uint16_t c = col.getColor(dp);
                 triProjected.col = c;
 
                 multiplyMatrixVector(triTranslated.p[0], triProjected.p[0], matProj);

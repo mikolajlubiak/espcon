@@ -8,9 +8,7 @@
 #include <Adafruit_ILI9341.h>
 #endif
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+#include "custom_math.h"
 
 #include "camera.h"
 
@@ -18,7 +16,8 @@ constexpr uint8_t tftCS = 10;
 constexpr uint8_t tftDC = 9;
 constexpr uint8_t tftRST = 8;
 
-constexpr uint8_t buttons[] = {41, 42};
+constexpr uint8_t buttonsNum = 4;
+constexpr uint8_t buttons[buttonsNum] = {1, 2, 4, 5};
 
 constexpr uint16_t fps = 60;
 constexpr float frame_delay = static_cast<float>(fps) / 1000;
@@ -45,7 +44,7 @@ struct color
 
 struct triangle
 {
-    glm::vec4 p[3];
+    vec4 p[3];
     uint16_t col;
 };
 
@@ -110,7 +109,7 @@ mesh *initMeshCube()
     mMesh->numTris = numTris;
 
     // Cube vertices
-    const glm::vec4 vertices[8] = {
+    const vec4 vertices[8] = {
         {0.0f, 0.0f, 0.0f, 1.0f},
         {0.0f, 0.0f, 1.0f, 1.0f},
         {0.0f, 1.0f, 1.0f, 1.0f},
@@ -183,7 +182,7 @@ mesh *loadObj(const char *path)
     uint32_t numFilledTris = 0;
 
     uint32_t numAllocVerts = numLoadVerts;
-    glm::vec3 *verts = reinterpret_cast<glm::vec3 *>(calloc(numAllocVerts, sizeof(glm::vec3)));
+    vec3 *verts = reinterpret_cast<vec3 *>(calloc(numAllocVerts, sizeof(vec3)));
     if (verts == nullptr)
     {
         Serial.println("Error in loadObj, verts == nullptr");
@@ -218,7 +217,7 @@ mesh *loadObj(const char *path)
                     if (numFilledVerts > numAllocVerts)
                     {
                         numAllocVerts = numAllocVerts * 2;
-                        verts = reinterpret_cast<glm::vec3 *>(realloc(verts, numAllocVerts * sizeof(glm::vec3)));
+                        verts = reinterpret_cast<vec3 *>(realloc(verts, numAllocVerts * sizeof(vec3)));
                         if (verts == nullptr)
                         {
                             Serial.println("Error in loadObj, verts == nullptr after realloc");
@@ -230,7 +229,7 @@ mesh *loadObj(const char *path)
                 {
                     int f[3];
                     sscanf(line + 2, "%d %d %d", &f[0], &f[1], &f[2]);
-                    mMesh->tris[numFilledTris] = {glm::vec4(verts[f[0] - 1], 1.0f), glm::vec4(verts[f[1] - 1], 1.0f), glm::vec4(verts[f[2] - 1], 1.0f)};
+                    mMesh->tris[numFilledTris] = {vec4(verts[f[0] - 1], 1.0f), vec4(verts[f[1] - 1], 1.0f), vec4(verts[f[2] - 1], 1.0f)};
                     numFilledTris++;
                     if (numFilledTris > mMesh->numTris)
                     {
@@ -356,24 +355,31 @@ class ESPCon
     const uint16_t width = tft.width();
 #endif
 
-    mesh *mMesh;
+    const float fAspectRatio = static_cast<float>(height) / width;
 
-    triangle *trisToRaster;
-    uint32_t numTrisToRaster;
+    mesh *mMesh = nullptr;
 
-    glm::mat4 model = glm::mat4(1.0f);
-    glm::mat4 view;
-    glm::mat4 projection;
+    triangle *trisToRaster = nullptr;
+    uint32_t numTrisToRaster = 0;
 
-    glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-    Camera camera = Camera(cameraPos);
+    mat4 model = mat4(1.0f);
+    mat4 view{};
+    mat4 projection{};
 
-    uint32_t deltaTime;
-    uint32_t elapsedTime;
-    uint32_t lastTime;
-    float theta;
+    Camera camera = Camera(vec3(0.0f, 0.0f, 10.0f));
+    vec3 vCameraRay{};
+    vec3 normal{}, line1{}, line2{};
 
-    color col;
+    triangle triTransformed{}, triViewed{}, triProjected{};
+
+    uint8_t buttonsState = 0;
+
+    uint32_t deltaTime = 0;
+    uint32_t elapsedTime = 0;
+    uint32_t lastTime = 0;
+    float theta = 0.0f;
+
+    color col{};
 
 public:
     ESPCon() {}
@@ -397,9 +403,9 @@ public:
             return 1;
         }
 
-        for (constexpr uint8_t button : buttons)
+        for (const uint8_t button : buttons)
         {
-            pinMode(button, INPUT);
+            pinMode(button, INPUT_PULLDOWN);
         }
 
 #ifdef BUILD_ST7735
@@ -415,12 +421,6 @@ public:
 #endif
 
         elapsedTime = millis();
-
-        const float fAspectRatio = static_cast<float>(height) / width;
-
-        projection = glm::perspective(glm::radians(camera.Zoom), fAspectRatio, 0.1f, 100.0f);
-
-        view = camera.GetViewMatrix();
 
         mMesh = loadObj("/littlefs/ship.obj");
         if (mMesh == nullptr)
@@ -454,17 +454,28 @@ public:
         theta = static_cast<float>(elapsedTime) / 1000;
         // Serial.println(1000.0f/deltaTime, DEC); // FPS
 
-        int button1State = digitalRead(buttons[0]);
-        int button2State = digitalRead(buttons[1]);
+        buttonsState = 0;
 
-        // check if the pushbutton is pressed. If it is, the buttonState is HIGH:
-        if (button1State == HIGH)
+        for (uint8_t i = 0; i < buttonsNum; i++)
+        {
+            buttonsState = buttonsState | (digitalRead(buttons[i]) << i);
+        }
+
+        if ((buttonsState >> 0) == HIGH)
+        {
+            camera.ProcessKeyboard(RIGHT, deltaTime);
+        }
+        if ((buttonsState >> 1) == HIGH)
         {
             camera.ProcessKeyboard(LEFT, deltaTime);
         }
-        else if (button2State == HIGH)
+        if ((buttonsState >> 2) == HIGH)
         {
-            camera.ProcessKeyboard(RIGHT, deltaTime);
+            camera.ProcessMouseMovement(10.0f, 0);
+        }
+        if ((buttonsState >> 3) == HIGH)
+        {
+            camera.ProcessMouseMovement(-10.0f, 0);
         }
 
         col.r = sin(theta * 2.0f) * 31;
@@ -477,52 +488,52 @@ public:
         // Draw triangles
         for (uint32_t i = 0; i < mMesh->numTris; i++)
         {
-            triangle triTransformed, triViewed, triProjected;
-
             // Translate triangles
-            triTransformed.p[0] = model * mMesh->tris[i].p[0];
-            triTransformed.p[1] = model * mMesh->tris[i].p[1];
-            triTransformed.p[2] = model * mMesh->tris[i].p[2];
+            triTransformed.p[0] = mMesh->tris[i].p[0] * model;
+            triTransformed.p[1] = mMesh->tris[i].p[1] * model;
+            triTransformed.p[2] = mMesh->tris[i].p[2] * model;
 
             // Check if side is visible
-            glm::vec3 normal, line1, line2;
-
             line1 = triTransformed.p[1] - triTransformed.p[0];
             line2 = triTransformed.p[2] - triTransformed.p[0];
 
-            normal = glm::cross(line1, line2);
-            normal = glm::normalize(normal);
+            normal = cross(line1, line2);
+            normal = normalize(normal);
 
-            glm::vec3 vCameraRay = glm::vec3(triTransformed.p[0]) - camera.Position;
+            vCameraRay = vec3(triTransformed.p[0]) - camera.Position;
 
-            if (glm::dot(normal, vCameraRay) < 0.0f)
+            if (dot(normal, vCameraRay) < 0.0f)
             {
                 // Add basic lighting
-                glm::vec3 light_direction = {0.0f, 1.0f, -1.0f};
-                light_direction = glm::normalize(light_direction);
+                vec3 light_direction = {0.0f, 0.0f, -1.0f};
+                light_direction = normalize(light_direction);
 
-                float dp = max(0.1f, glm::dot(light_direction, normal));
+                float dp = dot(light_direction, normal);
 
                 uint16_t c = col.getColor(dp);
                 triProjected.col = c;
 
-                triViewed.p[0] = view * triTransformed.p[0];
-                triViewed.p[1] = view * triTransformed.p[1];
-                triViewed.p[2] = view * triTransformed.p[2];
+                projection = perspective(deg_to_rad(camera.Zoom), fAspectRatio, 0.1f, 100.0f);
 
-                triProjected.p[0] = projection * triViewed.p[0];
-                triProjected.p[1] = projection * triViewed.p[1];
-                triProjected.p[2] = projection * triViewed.p[2];
+                view = camera.GetViewMatrix();
 
-                triProjected.p[0] /= triProjected.p[0].w;
-                triProjected.p[1] /= triProjected.p[1].w;
-                triProjected.p[2] /= triProjected.p[2].w;
+                triViewed.p[0] = triTransformed.p[0] * view;
+                triViewed.p[1] = triTransformed.p[1] * view;
+                triViewed.p[2] = triTransformed.p[2] * view;
+
+                triProjected.p[0] = triViewed.p[0] * projection;
+                triProjected.p[1] = triViewed.p[1] * projection;
+                triProjected.p[2] = triViewed.p[2] * projection;
+
+                triProjected.p[0] = triProjected.p[0] / triProjected.p[0].w;
+                triProjected.p[1] = triProjected.p[1] / triProjected.p[0].w;
+                triProjected.p[2] = triProjected.p[2] / triProjected.p[0].w;
 
                 // Scale into view
-                glm::vec3 vOffsetView = {1.0f, 1.0f, 0.0f};
-                triProjected.p[0] += vOffsetView;
-                triProjected.p[1] += vOffsetView;
-                triProjected.p[2] += vOffsetView;
+                vec3 vOffsetView = {1.0f, 1.0f, 0.0f};
+                triProjected.p[0] = triProjected.p[0] + vOffsetView;
+                triProjected.p[1] = triProjected.p[1] + vOffsetView;
+                triProjected.p[2] = triProjected.p[2] + vOffsetView;
 
                 triProjected.p[0].x *= 0.5f * static_cast<float>(width);
                 triProjected.p[1].x *= 0.5f * static_cast<float>(width);

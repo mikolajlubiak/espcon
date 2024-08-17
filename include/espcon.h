@@ -110,14 +110,14 @@ mesh *initMeshCube()
 
     // Cube vertices
     const vec4 vertices[8] = {
-        {0.0f, 0.0f, 0.0f, 1.0f},
-        {0.0f, 0.0f, 1.0f, 1.0f},
-        {0.0f, 1.0f, 1.0f, 1.0f},
-        {1.0f, 1.0f, 1.0f, 1.0f},
-        {1.0f, 1.0f, 0.0f, 1.0f},
-        {1.0f, 0.0f, 0.0f, 1.0f},
-        {0.0f, 1.0f, 0.0f, 1.0f},
-        {1.0f, 0.0f, 1.0f, 1.0f}};
+        {0.0f, 0.0f, 0.0f},
+        {0.0f, 0.0f, 1.0f},
+        {0.0f, 1.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f},
+        {1.0f, 1.0f, 0.0f},
+        {1.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f, 0.0f},
+        {1.0f, 0.0f, 1.0f}};
 
     // Triangle indices
     int triIndices[numTris][3] = {
@@ -229,7 +229,7 @@ mesh *loadObj(const char *path)
                 {
                     int f[3];
                     sscanf(line + 2, "%d %d %d", &f[0], &f[1], &f[2]);
-                    mMesh->tris[numFilledTris] = {vec4(verts[f[0] - 1], 1.0f), vec4(verts[f[1] - 1], 1.0f), vec4(verts[f[2] - 1], 1.0f)};
+                    mMesh->tris[numFilledTris] = {vec4(verts[f[0] - 1]), vec4(verts[f[1] - 1]), vec4(verts[f[2] - 1])};
                     numFilledTris++;
                     if (numFilledTris > mMesh->numTris)
                     {
@@ -366,9 +366,12 @@ class ESPCon
     mat4 view{};
     mat4 projection{};
 
-    Camera camera = Camera(vec3(0.0f, 0.0f, 10.0f));
+    Camera camera = Camera(vec3(0.0f, 0.0f, 16.0f));
     vec3 vCameraRay{};
     vec3 normal{}, line1{}, line2{};
+
+    const vec3 light_direction = normalize({0.0f, 0.0f, -1.0f});
+    float dp = 0.0f;
 
     triangle triTransformed{}, triViewed{}, triProjected{};
 
@@ -380,6 +383,7 @@ class ESPCon
     float theta = 0.0f;
 
     color col{};
+    uint16_t c;
 
 public:
     ESPCon() {}
@@ -471,11 +475,11 @@ public:
         }
         if ((buttonsState >> 2) == HIGH)
         {
-            camera.ProcessMouseMovement(10.0f, 0);
+            camera.ProcessMouseMovement(20.0f, 0.0f);
         }
         if ((buttonsState >> 3) == HIGH)
         {
-            camera.ProcessMouseMovement(-10.0f, 0);
+            camera.ProcessMouseMovement(-20.0f, 0.0f);
         }
 
         col.r = sin(theta * 2.0f) * 31;
@@ -505,12 +509,9 @@ public:
             if (dot(normal, vCameraRay) < 0.0f)
             {
                 // Add basic lighting
-                vec3 light_direction = {0.0f, 0.0f, -1.0f};
-                light_direction = normalize(light_direction);
+                dp = dot(light_direction, normal);
 
-                float dp = dot(light_direction, normal);
-
-                uint16_t c = col.getColor(dp);
+                c = col.getColor(dp);
                 triProjected.col = c;
 
                 projection = perspective(deg_to_rad(camera.Zoom), fAspectRatio, 0.1f, 100.0f);
@@ -526,8 +527,8 @@ public:
                 triProjected.p[2] = triViewed.p[2] * projection;
 
                 triProjected.p[0] = triProjected.p[0] / triProjected.p[0].w;
-                triProjected.p[1] = triProjected.p[1] / triProjected.p[0].w;
-                triProjected.p[2] = triProjected.p[2] / triProjected.p[0].w;
+                triProjected.p[1] = triProjected.p[1] / triProjected.p[1].w;
+                triProjected.p[2] = triProjected.p[2] / triProjected.p[2].w;
 
                 // Scale into view
                 vec3 vOffsetView = {1.0f, 1.0f, 0.0f};

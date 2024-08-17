@@ -2,6 +2,8 @@
 
 vec4::vec4(const vec3 &vec, const float w) : x(vec.x), y(vec.y), z(vec.z), w(w) {}
 
+vec4::vec4(const vec3 &vec) : x(vec.x), y(vec.y), z(vec.z), w(1.0f) {}
+
 const float vec3::length() const { return sqrt(dot(*this, *this)); }
 
 vec3 normalize(const vec3 &vec)
@@ -142,10 +144,10 @@ vec4 operator*(const vec4 &lhs, const mat4 &rhs)
 
 float deg_to_rad(const float deg)
 {
-    return deg * M_PI / 180.0;
+    return deg * (M_PI / 180.0f);
 }
 
 float rad_to_deg(const float rad)
 {
-    return rad * 180.0 / M_PI;
+    return rad * (180.0f / M_PI);
 }

@@ -11,7 +11,7 @@ struct mat4
 
     void zero()
     {
-        memset(&m, 0, 16 * sizeof(float));
+        memset(&m, 0, sizeof(float) * 16);
     }
 
     mat4()
@@ -37,7 +37,11 @@ struct vec4
 
     vec4(const float x, const float y, const float z, const float w) : x(x), y(y), z(z), w(w) {}
 
+    vec4(const float x, const float y, const float z) : x(x), y(y), z(z), w(1.0f) {}
+
     vec4(const vec3 &vec, const float w);
+
+    vec4(const vec3 &vec);
 };
 
 struct vec3

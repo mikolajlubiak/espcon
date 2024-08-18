@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include "custom_math.h"
 
 // Defines several possible options for camera movement. Used as abstraction to stay away from window-system specific input methods
@@ -85,10 +87,7 @@ public:
         // make sure that when pitch is out of bounds, screen doesn't get flipped
         if (constrainPitch)
         {
-            if (Pitch > 89.0f)
-                Pitch = 89.0f;
-            if (Pitch < -89.0f)
-                Pitch = -89.0f;
+            Pitch = constrain(Pitch, -89.0f, 89.0f);
         }
 
         // update Front, Right and Up Vectors using the updated Euler angles

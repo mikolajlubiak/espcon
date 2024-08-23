@@ -28,16 +28,19 @@ struct color
     uint8_t g : 6;
     uint8_t b : 5;
 
-    uint16_t load()
+    float ambient = 0.1f;
+
+    uint16_t load() const
     {
         return ((r << 11) | (g << 5) | b);
     }
 
-    uint16_t getColor(float lum)
+    uint16_t getColor(const float lum) const
     {
-        uint8_t _r = max(lum, 0.2f) * this->r;
-        uint8_t _g = max(lum, 0.2f) * this->g;
-        uint8_t _b = max(lum, 0.2f) * this->b;
+        const float _lum = lum * 4.0f;
+        const uint8_t _r = min(static_cast<int>(max(_lum, ambient) * this->r), 31);
+        const uint8_t _g = min(static_cast<int>(max(_lum, ambient) * this->g), 63);
+        const uint8_t _b = min(static_cast<int>(max(_lum, ambient) * this->b), 31);
         return ((_r << 11) | (_g << 5) | _b);
     }
 };
@@ -370,7 +373,7 @@ class ESPCon
     vec3 vCameraRay{};
     vec3 normal{}, line1{}, line2{};
 
-    const vec3 light_direction = normalize({0.0f, 0.0f, -1.0f});
+    const vec3 light_direction = normalize({-1.0f, -1.0f, -1.0f});
     float dp = 0.0f;
 
     triangle triTransformed{}, triViewed{}, triProjected{};

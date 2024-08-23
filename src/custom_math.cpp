@@ -152,3 +152,8 @@ float rad_to_deg(const float rad)
 {
     return rad * (180.0f / M_PI);
 }
+
+float map_floats(float x, float in_min, float in_max, float out_min, float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}

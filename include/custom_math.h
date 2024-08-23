@@ -85,3 +85,5 @@ vec4 operator*(const vec4 &lhs, const mat4 &rhs);
 float deg_to_rad(const float deg);
 
 float rad_to_deg(const float rad);
+
+float map_floats(float x, float in_min, float in_max, float out_min, float out_max);

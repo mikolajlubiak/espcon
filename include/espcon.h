@@ -16,8 +16,8 @@ constexpr uint8_t tftCS = 10;
 constexpr uint8_t tftDC = 9;
 constexpr uint8_t tftRST = 8;
 
-constexpr uint8_t buttonsNum = 4;
-constexpr uint8_t buttons[buttonsNum] = {1, 2, 4, 5};
+constexpr uint8_t buttonsNum = 2;
+constexpr uint8_t buttons[buttonsNum] = {1, 2};
 
 constexpr uint16_t fps = 60;
 constexpr float frame_delay = static_cast<float>(fps) / 1000;
@@ -476,14 +476,24 @@ public:
         {
             camera.ProcessKeyboard(LEFT, deltaTime);
         }
-        if ((buttonsState >> 2) == HIGH)
+
+        float y_axis = analogRead(A3);
+        y_axis = (y_axis - (4000.0f / 2)) / 50;
+
+        if (y_axis < 5.0f && y_axis > -5.0f)
         {
-            camera.ProcessMouseMovement(20.0f, 0.0f);
+            y_axis = 0.0f;
         }
-        if ((buttonsState >> 3) == HIGH)
+
+        float x_axis = analogRead(A4);
+        x_axis = (x_axis - (4000.0f / 2)) / 100;
+
+        if (x_axis < 5.0f && x_axis > -5.0f)
         {
-            camera.ProcessMouseMovement(-20.0f, 0.0f);
+            x_axis = 0.0f;
         }
+
+        camera.ProcessMouseMovement(x_axis, y_axis);
 
         col.r = sin(theta * 2.0f) * 31;
         col.g = sin(theta * 0.7f) * 63;

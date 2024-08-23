@@ -63,8 +63,9 @@ mat4 perspective(const float fFov, const float fAspectRatio, const float fNear,
                  const float fFar)
 {
     mat4 mat;
-    mat.m[0][0] = fAspectRatio * fFov;
-    mat.m[1][1] = fFov;
+    const float fov = 1.0f / tan(fFov/2.0f);
+    mat.m[0][0] = fAspectRatio * fov;
+    mat.m[1][1] = fov;
     mat.m[2][2] = fFar / (fFar - fNear);
     mat.m[3][2] = (-fFar * fNear) / (fFar - fNear);
     mat.m[2][3] = 1.0f;

@@ -2,6 +2,10 @@
 
 **espcon** is a from-scratch embedded game console engine running on an ESP32-S3 microcontroller. It features a fully CPU-based software 3D rendering engine — no GPU, no accelerator — that loads Wavefront OBJ meshes from an on-chip LittleFS filesystem, transforms vertices through a complete model-view-projection pipeline, and pushes rasterized triangles to a color TFT display over SPI. Input is handled via GPIO buttons and an analog joystick, all orchestrated by FreeRTOS.
 
+## Project showcase
+
+Playlist with demos: https://video.infosec.exchange/w/p/oQ5QCWFV5TxV9F3JkxzUYx
+
 ## Features
 
 - **Software 3D rasterizer** — complete model → view → projection pipeline running entirely on the CPU

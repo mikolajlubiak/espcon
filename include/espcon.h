@@ -337,7 +337,8 @@ int compareTris(const void *t1Ptr, const void *t2Ptr)
     const triangle *t2 = reinterpret_cast<const triangle *>(t2Ptr);
     float z1 = (t1->p[0].z + t1->p[1].z + t1->p[2].z) / 3;
     float z2 = (t2->p[0].z + t2->p[1].z + t2->p[2].z) / 3;
-    return z1 > z2;
+    // qsort needs a negative/zero/positive result; farther triangles go first
+    return (z1 < z2) - (z1 > z2);
 }
 
 class ESPCon

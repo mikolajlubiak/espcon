@@ -1,56 +1,57 @@
 # espcon
 
-**espcon** is a from-scratch embedded game console engine running on an ESP32-S3 microcontroller. It features a fully CPU-based software 3D rendering engine — no GPU, no accelerator — that loads Wavefront OBJ meshes from an on-chip LittleFS filesystem, transforms vertices through a complete model-view-projection pipeline, and pushes rasterized triangles to a color TFT display over SPI. Input is handled via GPIO buttons and an analog joystick, all orchestrated by FreeRTOS.
+A real-time 3D renderer for the ESP32-S3, a microcontroller with no GPU. It loads an OBJ mesh from flash and draws it lit and shaded on an SPI TFT display, with an analog joystick and two buttons driving the camera.
 
 ## Project showcase
 
 Playlist with demos: https://video.infosec.exchange/w/p/oQ5QCWFV5TxV9F3JkxzUYx
 
-## Features
+## How it works
 
-- **Software 3D rasterizer** — complete model → view → projection pipeline running entirely on the CPU
-- **OBJ mesh loading** — Wavefront `.obj` files streamed and parsed from LittleFS at runtime
-- **FreeRTOS task management** — cooperative yielding and frame-rate control via the Arduino/ESP-IDF FreeRTOS layer
-- **SPI-driven display output** — rasterized triangles pushed to a TFT display at up to ~80 MHz SPI
-- **Dual display support** — ST7735 and ILI9341 selected at compile time with a single build flag
-- **Button and analog joystick input** — GPIO (INPUT\_PULLDOWN) buttons for movement, ADC joystick for look-around with hardware deadzone filtering
-- **Depth sorting** — painter's algorithm (back-to-front qsort) for correct triangle overdraw
-- **Dynamic lighting** — directional light with dot-product shading and configurable ambient floor
-- **Dynamic color animation** — RGB565 color cycling via sinusoidal waves per frame
+Every frame runs entirely on the CPU:
+
+1. **Transform:** every triangle of the mesh goes through my own vector and matrix library (`vec3`, `vec4`, `mat4`, point-at and perspective matrices), which replaced glm in the build.
+2. **Back-face culling:** triangles facing away from the camera are dropped using the cross-product face normal.
+3. **Flat shading:** one directional light gives each face a Lambert term with an ambient floor, applied to an RGB565 base color that cycles over time.
+4. **Projection:** view and perspective transforms, perspective divide and viewport mapping.
+5. **Depth sort:** visible triangles are sorted back to front by average depth (painter's algorithm).
+6. **Fill:** each triangle is filled in a single color with Adafruit GFX `fillTriangle`, drawn straight to the display over SPI; there is no framebuffer.
+
+Around the pipeline:
+
+- **Mesh loading:** OBJ meshes (`v` and `f` lines) are streamed from a LittleFS partition in flash into growable heap buffers at startup.
+- **Displays:** ST7735 and ILI9341 controllers, selected at compile time. SPI runs at 40 MHz on both; 80 MHz was tried on the ST7735 and produced artifacts.
+- **Input:** an analog joystick read through the 12-bit ADC, with a software deadzone, controls yaw and pitch; two GPIO buttons strafe the camera.
+- **Board:** a custom PlatformIO board definition for the ESP32-S3-DevKitC-1 N16R8V (16 MB flash, 8 MB PSRAM).
 
 ## Tech Stack
 
-`C++` `ESP32-S3` `PlatformIO` `FreeRTOS` `SPI` `LittleFS` `Adafruit GFX` `ST7735` `ILI9341`
-
-## Documentation
-
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [Rendering Engine Deep Dive](docs/RENDERING_ENGINE.md)
-- [Contributing Guide](CONTRIBUTING.md)
+`C++` `ESP32-S3` `Arduino` `PlatformIO` `SPI` `LittleFS` `Adafruit GFX` `ST7735` `ILI9341`
 
 ## Hardware
 
-- ESP32-S3 development board (e.g. `esp32-s3-devkitc-1`)
-- ST7735 or ILI9341 display connected via SPI
-  - CS → pin 10, DC → pin 9, RST → pin 8
-- 2 buttons connected to pins 1 and 2 (configured as `INPUT_PULLDOWN`)
-- Analog joystick connected to pins A3 (Y-axis) and A4 (X-axis)
+- ESP32-S3 development board (`esp32-s3-devkitc-1`, or the N16R8V variant with the bundled board definition)
+- ST7735 or ILI9341 display on SPI
+  - CS → GPIO 10, DC → GPIO 9, RST → GPIO 8 (RST is used by the ST7735 build only)
+- 2 buttons from GPIO 1 and GPIO 2 to 3.3 V (the pins use internal pull-downs)
+- Analog joystick on A3 (Y axis) and A4 (X axis)
 
 ## Build
 
 - Install [PlatformIO](https://platformio.org/)
 - `git clone https://github.com/mikolajlubiak/espcon`
 - `cd espcon`
+- Pick the display in `platformio.ini`: `-D BUILD_ILI9341` (default) or `-D BUILD_ST7735` in `build_flags`
 - Connect your board
-- Upload the filesystem (ships the default `ship.obj` mesh):
-  - `pio run --target uploadfs`
+- Upload the filesystem with the default `ship.obj` mesh:
+  - `pio run -e esp32-s3-devkitc-1-n16r8v -t uploadfs`
 - Build and flash:
-  - ST7735: `pio run --environment esp32-s3-devkitc-1 --target upload -- -D BUILD_ST7735`
-  - ILI9341 (default): `pio run --environment esp32-s3-devkitc-1 --target upload`
+  - `pio run -e esp32-s3-devkitc-1-n16r8v -t upload`
+- For a standard ESP32-S3-DevKitC-1, use `-e esp32-s3-devkitc-1` in both commands.
 
 ## Usage
 
-- Button on pin 1 – move camera right
-- Button on pin 2 – move camera left
-- Joystick (A3/A4) – look around
-- Place your own `.obj` mesh files in `data/littlefs/` and update the path in `espcon.h`
+- Button on GPIO 1: move the camera right
+- Button on GPIO 2: move the camera left
+- Joystick: look around
+- To render your own mesh, put a triangulated `.obj` with vertex positions only (`v` and `f` lines) in `data/littlefs/` and change the path passed to `loadObj` in `include/espcon.h`.
